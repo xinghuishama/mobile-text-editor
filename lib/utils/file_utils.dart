@@ -5,8 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:gbk/gbk.dart';
-import 'package:charset_converter/charset_converter.dart';
-import 'package:charset_detector/charset_detector.dart';
+import 'package:charset/charset.dart' as charset;
 import '../models/file_model.dart';
 
 class FileUtils {
@@ -21,43 +20,43 @@ class FileUtils {
 
   // 读取文件内容 (自动检测编码)
   static Future<String> readFileWithEncoding(String path, String encoding) async {
-    final file = File(path);
-    final bytes = await file.readAsBytes();
-    // 如果指定编码，直接转换
-    if (encoding == 'UTF-8') {
-      return utf8.decode(bytes);
-    } else if (encoding == 'GBK') {
-      return gbk.decode(bytes);
-    } else if (encoding == 'Big5') {
-      final result = await CharsetConverter.decode('big5', bytes);
-      return result;
-    } else {
-      // 尝试自动检测
-      final detected = await CharsetDetector.detect(bytes);
-      if (detected != null && detected.charset != null) {
-        return await CharsetConverter.decode(detected.charset!, bytes);
+  final file = File(path);
+  final bytes = await file.readAsBytes();
+  if (encoding == 'UTF-8') {
+    return utf8.decode(bytes);
+  } else if (encoding == 'GBK') {
+    return gbk.decode(bytes);
+  } else if (encoding == 'Big5') {
+    // 使用 charset 包解码 Big5
+    return charset.decode(bytes, Charset.forName('Big5'));
+  } else {
+    // 自动检测编码
+    try {
+      final detected = charset.detect(bytes);
+      if (detected != null) {
+        return charset.decode(bytes, detected);
       }
-      // 默认UTF-8
-      return utf8.decode(bytes);
-    }
+    } catch (_) {}
+    // 默认 UTF-8
+    return utf8.decode(bytes);
+  }
   }
 
   // 写入文件 (指定编码)
-  static Future<void> writeFileWithEncoding(String path, String content, String encoding) async {
-    final file = File(path);
-    Uint8List bytes;
-    if (encoding == 'UTF-8') {
-      bytes = utf8.encode(content) as Uint8List;
-    } else if (encoding == 'GBK') {
-      bytes = gbk.encode(content) as Uint8List;
-    } else if (encoding == 'Big5') {
-      final encoded = await CharsetConverter.encode('big5', content);
-      bytes = encoded;
-    } else {
-      bytes = utf8.encode(content) as Uint8List;
-    }
-    await file.writeAsBytes(bytes);
+static Future<void> writeFileWithEncoding(String path, String content, String encoding) async {
+  final file = File(path);
+  List<int> bytes;
+  if (encoding == 'UTF-8') {
+    bytes = utf8.encode(content);
+  } else if (encoding == 'GBK') {
+    bytes = gbk.encode(content);
+  } else if (encoding == 'Big5') {
+    bytes = charset.encode(content, Charset.forName('Big5'));
+  } else {
+    bytes = utf8.encode(content);
   }
+  await file.writeAsBytes(bytes);
+}
 
   // 创建新文件
   static Future<FileModel> createNewFile({String content = '', String encoding = 'UTF-8'}) async {
