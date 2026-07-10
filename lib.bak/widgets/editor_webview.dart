@@ -20,10 +20,10 @@ class EditorWebView extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  EditorWebViewState createState() => EditorWebViewState();
+  _EditorWebViewState createState() => _EditorWebViewState();
 }
 
-class EditorWebViewState extends State<EditorWebView> {
+class _EditorWebViewState extends State<EditorWebView> {
   late WebViewController _controller;
   bool _isLoaded = false;
   String _currentContent = '';
