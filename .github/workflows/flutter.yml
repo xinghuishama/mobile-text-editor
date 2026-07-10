@@ -31,6 +31,9 @@ jobs:
       - name: Set NDK version
         run: |
           sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
+      - name: Set NDK version
+        run: |
+          sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
         run: |
           cp -r /tmp/backup/* .
       
