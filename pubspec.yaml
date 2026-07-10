@@ -18,8 +18,7 @@ dependencies:
     sdk: flutter
   intl: ^0.18.1
   gbk: ^0.4.0                 # GBK 编码支持
-  charset_converter: ^2.0.0   # 编码转换（支持 Big5）
-  charset_detector: ^1.0.0    # 自动检测编码
+  charset: ^2.0.0   # 支持检测与转换
 
 dev_dependencies:
   flutter_test:
