@@ -14,6 +14,12 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.29.0'
+      - name: Create full project structure (preserve our code)
+        run: |
+          mkdir -p /tmp/backup
+          cp -r lib assets pubspec.yaml /tmp/backup/
+          flutter create . --force
+          cp -r /tmp/backup/* .
       - name: Install dependencies
         run: flutter pub get
       - name: Setup Android SDK
@@ -21,7 +27,7 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --releas
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
