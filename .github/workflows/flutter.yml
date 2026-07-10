@@ -10,12 +10,16 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.13.0'
+          flutter-version: '3.19.0'
       - name: Install dependencies
         run: flutter pub get
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses
       - name: Build APK
         run: flutter build apk --release
       - name: Upload APK
@@ -23,25 +27,3 @@ jobs:
         with:
           name: app-release
           path: build/app/outputs/flutter-apk/app-release.apk
-
-  build-ios:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.13.0'
-      - name: Install dependencies
-        run: flutter pub get
-      - name: Build iOS
-        run: flutter build ios --release --no-codesign
-      - name: Archive IPA (optional)
-        run: |
-          cd build/ios/iphoneos
-          mkdir Payload
-          cp -R Runner.app Payload/
-          zip -r app-release.ipa Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-release
-          path: build/ios/iphoneos/app-release.ipa

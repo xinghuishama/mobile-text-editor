@@ -12,7 +12,7 @@ dependencies:
   webview_flutter: ^4.10.0
   provider: ^6.1.2
   shared_preferences: ^2.3.2
-  path_provider: ^2.1.4
+  path_provider: 2.0.15
   file_picker: ^8.1.2
   charset: ^2.0.0
   flutter_localizations:
