@@ -24,8 +24,8 @@ jobs:
         run: |
           find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} +
       
-      - name: Create fresh Flutter project
-        run: flutter create .
+      - name: Create fresh Flutter project with valid name
+        run: flutter create . --project-name mobile_text_editor
       
       - name: Restore our code
         run: |
