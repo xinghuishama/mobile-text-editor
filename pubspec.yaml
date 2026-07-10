@@ -17,7 +17,6 @@ dependencies:
   charset: ^2.0.0
   flutter_localizations:
     sdk: flutter
-  intl: 0.18.1
 
 dev_dependencies:
   flutter_test:
