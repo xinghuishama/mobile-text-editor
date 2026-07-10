@@ -15,11 +15,12 @@ jobs:
         with:
           flutter-version: '3.29.0'
       - name: Create full project structure (preserve our code)
-        run: |
-          mkdir -p /tmp/backup
-          cp -r lib assets pubspec.yaml /tmp/backup/
-          flutter create . --force
-          cp -r /tmp/backup/* .
+  run: |
+    mkdir -p /tmp/backup
+    cp -r lib assets pubspec.yaml /tmp/backup/
+    rm -rf android ios linux macos windows web .metadata .gitignore
+    flutter create .
+    cp -r /tmp/backup/* .
       - name: Install dependencies
         run: flutter pub get
       - name: Setup Android SDK
