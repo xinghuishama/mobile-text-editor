@@ -14,21 +14,35 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.29.0'
-      - name: Create full project structure (preserve our code)
-  run: |
-    mkdir -p /tmp/backup
-    cp -r lib assets pubspec.yaml /tmp/backup/
-    rm -rf android ios linux macos windows web .metadata .gitignore
-    flutter create .
-    cp -r /tmp/backup/* .
+      
+      - name: Backup core files
+        run: |
+          mkdir -p /tmp/backup
+          cp -r lib assets pubspec.yaml /tmp/backup/
+      
+      - name: Clean directory (keep .git)
+        run: |
+          find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} +
+      
+      - name: Create fresh Flutter project
+        run: flutter create .
+      
+      - name: Restore our code
+        run: |
+          cp -r /tmp/backup/* .
+      
       - name: Install dependencies
         run: flutter pub get
+      
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+      
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
+      
       - name: Build APK
-        run: flutter build apk --releas
+        run: flutter build apk --release
+      
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
