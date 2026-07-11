@@ -28,11 +28,18 @@ jobs:
       - name: Create fresh Flutter project
         run: flutter create . --project-name mobile_text_editor
 
-      - name: List files after create (debug)
-        run: ls -la
-
       - name: Restore our code
         run: cp -r /tmp/backup/* .
+
+      - name: Set NDK version
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
+          elif [ -f android/app/build.gradle.kts ]; then
+            sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
+          else
+            echo "No build.gradle found"
+          fi
 
       - name: Install dependencies
         run: flutter pub get
@@ -43,11 +50,11 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build debug APK
+        run: flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
