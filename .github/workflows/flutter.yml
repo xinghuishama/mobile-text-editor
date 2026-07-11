@@ -28,12 +28,11 @@ jobs:
       - name: Create fresh Flutter project
         run: flutter create . --project-name mobile_text_editor
 
+      - name: List files after create (debug)
+        run: ls -la
+
       - name: Restore our code
         run: cp -r /tmp/backup/* .
-
-      - name: Set NDK version
-        run: |
-          sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
 
       - name: Install dependencies
         run: flutter pub get
