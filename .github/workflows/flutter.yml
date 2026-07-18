@@ -31,12 +31,12 @@ jobs:
       - name: Restore our code
         run: cp -r /tmp/backup/* .
 
-      - name: Set NDK version
+      - name: Set NDK version (for build.gradle.kts)
         run: |
-          if [ -f android/app/build.gradle ]; then
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i '/android {/a\    ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
             sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
-          elif [ -f android/app/build.gradle.kts ]; then
-            sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
           else
             echo "No build.gradle found"
           fi
