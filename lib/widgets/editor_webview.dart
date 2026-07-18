@@ -37,11 +37,9 @@ class EditorWebViewState extends State<EditorWebView> {
   @override
   void didUpdateWidget(EditorWebView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 如果文件ID改变或内容改变，重新加载编辑器内容
     if (oldWidget.fileId != widget.fileId) {
       _loadContent();
     } else if (oldWidget.content != widget.content && _isLoaded) {
-      // 内容变化可能来自外部（如撤销重做）
       _setEditorContent(widget.content);
     }
     if (oldWidget.isDarkMode != widget.isDarkMode && _isLoaded) {
@@ -55,7 +53,6 @@ class EditorWebViewState extends State<EditorWebView> {
       initialUrl: Uri.dataFromString(_getHtml(), mimeType: 'text/html').toString(),
       onWebViewCreated: (controller) {
         _controller = controller;
-        // 注册JavaScript通道
         _controller.addJavaScriptChannel(
           'FlutterBridge',
           onMessageReceived: (message) {
@@ -114,7 +111,6 @@ class EditorWebViewState extends State<EditorWebView> {
         minimap: { enabled: false },
       });
 
-      // 监听内容变化
       editor.onDidChangeModelContent(() => {
         const val = editor.getValue();
         if (val !== currentContent) {
@@ -126,7 +122,6 @@ class EditorWebViewState extends State<EditorWebView> {
         }
       });
 
-      // 设置语言
       window.setLanguage = function(lang) {
         monaco.editor.setModelLanguage(editor.getModel(), lang);
       };
@@ -178,11 +173,9 @@ class EditorWebViewState extends State<EditorWebView> {
   }
 
   String _escapeJs(String s) {
-    // 简单的转义，避免JS注入
     return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n').replaceAll('\r', '');
   }
 
-  // 外部控制方法
   void triggerFind() {
     _controller.runJavaScript('triggerFind();');
   }

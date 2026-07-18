@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:charset/dart';
+import 'package:charset/charset.dart' as charset;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/file_model.dart';
 
@@ -16,35 +16,35 @@ class FileUtils {
 
   static String generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 
-  static Future<String> readFileWithEncoding(String path, String encoding) async {
-    final file = File(path);
+  static Future<String> readFileWithEncoding(String filePath, String encoding) async {
+    final file = File(filePath);
     final bytes = await file.readAsBytes();
     if (encoding == 'UTF-8') {
       return utf8.decode(bytes);
     } else if (encoding == 'GBK') {
-      return decode(bytes, gbk);
+      return charset.decode(bytes, charset.gbk);
     } else if (encoding == 'Big5') {
-      return decode(bytes, big5);
+      return charset.decode(bytes, charset.big5);
     } else {
       try {
-        final detected = detect(bytes);
+        final detected = charset.detect(bytes);
         if (detected != null) {
-          return decode(bytes, detected);
+          return charset.decode(bytes, detected);
         }
       } catch (_) {}
       return utf8.decode(bytes);
     }
   }
 
-  static Future<void> writeFileWithEncoding(String path, String content, String encoding) async {
-    final file = File(path);
+  static Future<void> writeFileWithEncoding(String filePath, String content, String encoding) async {
+    final file = File(filePath);
     List<int> bytes;
     if (encoding == 'UTF-8') {
       bytes = utf8.encode(content);
     } else if (encoding == 'GBK') {
-      bytes = encode(content, gbk);
+      bytes = charset.encode(content, charset.gbk);
     } else if (encoding == 'Big5') {
-      bytes = encode(content, big5);
+      bytes = charset.encode(content, charset.big5);
     } else {
       bytes = utf8.encode(content);
     }
@@ -80,7 +80,7 @@ class FileUtils {
     final originalName = file.name;
     String encoding = 'UTF-8';
     try {
-      final detected = detect(bytes);
+      final detected = charset.detect(bytes);
       if (detected != null) {
         encoding = detected.name;
       }
@@ -116,8 +116,8 @@ class FileUtils {
     return outputPath;
   }
 
-  static Future<void> deleteFile(String path) async {
-    final file = File(path);
+  static Future<void> deleteFile(String filePath) async {
+    final file = File(filePath);
     if (await file.exists()) {
       await file.delete();
     }
