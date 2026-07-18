@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:charset/charset.dart' as charset;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/file_model.dart';
 
@@ -16,48 +14,23 @@ class FileUtils {
 
   static String generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 
-  static Future<String> readFileWithEncoding(String filePath, String encoding) async {
-    final file = File(filePath);
-    final bytes = await file.readAsBytes();
-    if (encoding == 'UTF-8') {
-      return utf8.decode(bytes);
-    } else if (encoding == 'GBK') {
-      return charset.decode(bytes, charset.gbk);
-    } else if (encoding == 'Big5') {
-      return charset.decode(bytes, charset.big5);
-    } else {
-      try {
-        final detected = charset.detect(bytes);
-        if (detected != null) {
-          return charset.decode(bytes, detected);
-        }
-      } catch (_) {}
-      return utf8.decode(bytes);
-    }
+  // 始终使用 UTF-8 读取
+  static Future<String> readFile(String path) async {
+    final file = File(path);
+    return await file.readAsString(encoding: utf8);
   }
 
-  static Future<void> writeFileWithEncoding(String filePath, String content, String encoding) async {
-    final file = File(filePath);
-    List<int> bytes;
-    if (encoding == 'UTF-8') {
-      bytes = utf8.encode(content);
-    } else if (encoding == 'GBK') {
-      bytes = charset.encode(content, charset.gbk);
-    } else if (encoding == 'Big5') {
-      bytes = charset.encode(content, charset.big5);
-    } else {
-      bytes = utf8.encode(content);
-    }
-    await file.writeAsBytes(bytes);
+  // 始终使用 UTF-8 写入
+  static Future<void> writeFile(String path, String content) async {
+    final file = File(path);
+    await file.writeAsString(content, encoding: utf8);
   }
 
   static Future<FileModel> createNewFile({String content = '', String encoding = 'UTF-8'}) async {
     final dir = await getAppDir();
     final fileName = '新文件_${DateTime.now().millisecondsSinceEpoch}.txt';
     final filePath = path.join(dir, fileName);
-    final file = File(filePath);
-    await file.create(recursive: true);
-    await writeFileWithEncoding(filePath, content, encoding);
+    await writeFile(filePath, content);
     return FileModel(
       id: generateId(),
       name: fileName,
@@ -78,31 +51,27 @@ class FileUtils {
     final file = result.files.single;
     final bytes = file.bytes!;
     final originalName = file.name;
-    String encoding = 'UTF-8';
-    try {
-      final detected = charset.detect(bytes);
-      if (detected != null) {
-        encoding = detected.name;
-      }
-    } catch (_) {}
+    // 复制到应用目录
     final dir = await getAppDir();
     final newPath = path.join(dir, originalName);
     final newFile = File(newPath);
     await newFile.writeAsBytes(bytes);
-    String content = await readFileWithEncoding(newPath, encoding);
+    // 以 UTF-8 读取（可添加自动检测，此处简化）
+    String content = utf8.decode(bytes, allowMalformed: true);
     return FileModel(
       id: generateId(),
       name: originalName,
       path: newPath,
       content: content,
-      encoding: encoding,
+      encoding: 'UTF-8',
       isDirty: false,
       isNewFile: false,
     );
   }
 
   static Future<void> saveFile(FileModel file, String encoding) async {
-    await writeFileWithEncoding(file.path, file.content, encoding);
+    // 忽略 encoding，固定 UTF-8
+    await writeFile(file.path, file.content);
   }
 
   static Future<String?> saveAsFile(FileModel file, {String? encoding}) async {
@@ -111,8 +80,7 @@ class FileUtils {
       fileName: file.name,
     );
     if (outputPath == null) return null;
-    final enc = encoding ?? file.encoding;
-    await writeFileWithEncoding(outputPath, file.content, enc);
+    await writeFile(outputPath, file.content);
     return outputPath;
   }
 

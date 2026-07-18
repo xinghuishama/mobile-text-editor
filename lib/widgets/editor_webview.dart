@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../providers/app_state.dart';
 
 class EditorWebView extends StatefulWidget {
   final String fileId;
@@ -57,8 +56,7 @@ class EditorWebViewState extends State<EditorWebView> {
           'FlutterBridge',
           onMessageReceived: (message) {
             final data = jsonDecode(message.message);
-            final type = data['type'];
-            if (type == 'contentChanged') {
+            if (data['type'] == 'contentChanged') {
               final content = data['content'];
               _currentContent = content;
               widget.onContentChanged(content);
