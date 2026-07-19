@@ -17,6 +17,9 @@ class FileListPage extends StatelessWidget {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               context.read<AppState>().refreshSavedFiles();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已刷新')),
+              );
             },
           ),
           IconButton(
@@ -42,7 +45,7 @@ class FileListPage extends StatelessWidget {
                   Text('没有文件，点击右下角创建或打开'),
                   SizedBox(height: 8),
                   Text(
-                    '提示：创建后需要点击保存按钮才会永久保存',
+                    '提示：创建文件后自动进入编辑器',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
