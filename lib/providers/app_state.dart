@@ -54,7 +54,7 @@ class AppState extends ChangeNotifier {
       content: content ?? '',
       encoding: defaultEncoding,
     );
-    // 确保文件被添加到 savedFiles
+    // 添加到列表
     savedFiles.add(file);
     await _saveFileList();
     notifyListeners();
@@ -83,7 +83,7 @@ class AppState extends ChangeNotifier {
     if (openedFiles.length >= 5) {
       throw Exception('已达最大打开文件数 (5个)');
     }
-    // 读取文件内容（如果还没有内容）
+    // 读取文件内容
     String content = file.content;
     if (content.isEmpty) {
       try {
@@ -122,14 +122,16 @@ class AppState extends ChangeNotifier {
     final enc = encoding ?? file.encoding;
     await FileUtils.saveFile(file, enc);
     final index = openedFiles.indexWhere((f) => f.id == fileId);
-    openedFiles[index] = file.copyWith(isDirty: false, encoding: enc);
+    final savedFile = file.copyWith(isDirty: false, encoding: enc);
+    openedFiles[index] = savedFile;
+    
     // 更新 savedFiles 中的对应条目
     final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
     if (savedIndex != -1) {
-      savedFiles[savedIndex] = openedFiles[index];
+      savedFiles[savedIndex] = savedFile;
     } else {
       // 如果是新建文件，添加到 savedFiles
-      savedFiles.add(openedFiles[index]);
+      savedFiles.add(savedFile);
     }
     await _saveFileList();
     notifyListeners();
@@ -166,7 +168,6 @@ class AppState extends ChangeNotifier {
         content: content,
         isDirty: true,
       );
-      // 更新 savedFiles 中对应的条目（如果存在）
       final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
       if (savedIndex != -1) {
         savedFiles[savedIndex] = openedFiles[index];

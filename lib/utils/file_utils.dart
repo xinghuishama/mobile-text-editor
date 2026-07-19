@@ -14,19 +14,23 @@ class FileUtils {
 
   static String generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 
-  static Future<String> readFile(String path) async {
-    final file = File(path);
+  static Future<String> readFile(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      return '';
+    }
     return await file.readAsString(encoding: utf8);
   }
 
-  static Future<void> writeFile(String path, String content) async {
-    final file = File(path);
+  static Future<void> writeFile(String filePath, String content) async {
+    final file = File(filePath);
     await file.writeAsString(content, encoding: utf8);
   }
 
   static Future<FileModel> createNewFile({String content = '', String encoding = 'UTF-8'}) async {
     final dir = await getAppDir();
-    final fileName = '新文件_${DateTime.now().millisecondsSinceEpoch}.txt';
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = '新文件_$timestamp.txt';
     final filePath = path.join(dir, fileName);
     await writeFile(filePath, content);
     return FileModel(

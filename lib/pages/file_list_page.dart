@@ -14,6 +14,12 @@ class FileListPage extends StatelessWidget {
         title: const Text('文件列表'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              context.read<AppState>().refreshSavedFiles();
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
@@ -34,6 +40,11 @@ class FileListPage extends StatelessWidget {
                   Icon(Icons.folder_open, size: 64, color: Colors.grey),
                   SizedBox(height: 16),
                   Text('没有文件，点击右下角创建或打开'),
+                  SizedBox(height: 8),
+                  Text(
+                    '提示：创建后需要点击保存按钮才会永久保存',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             );
@@ -61,11 +72,15 @@ class FileListPage extends StatelessWidget {
                         onTap: () async {
                           try {
                             await appState.openFile(file);
-                            Navigator.pushNamed(context, '/editor');
+                            if (context.mounted) {
+                              Navigator.pushNamed(context, '/editor');
+                            }
                           } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString())),
-                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString())),
+                              );
+                            }
                           }
                         },
                         child: Container(
@@ -124,11 +139,15 @@ class FileListPage extends StatelessWidget {
                   onTap: () async {
                     try {
                       await appState.openFile(file);
-                      Navigator.pushNamed(context, '/editor');
+                      if (context.mounted) {
+                        Navigator.pushNamed(context, '/editor');
+                      }
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString())),
-                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString())),
+                        );
+                      }
                     }
                   },
                 );
@@ -149,9 +168,10 @@ class FileListPage extends StatelessWidget {
           FloatingActionButton(
             heroTag: 'open',
             onPressed: () async {
-              final file = await context.read<AppState>().openExternalFile();
-              if (file != null) {
-                await context.read<AppState>().openFile(file);
+              final appState = context.read<AppState>();
+              final file = await appState.openExternalFile();
+              if (file != null && context.mounted) {
+                await appState.openFile(file);
                 Navigator.pushNamed(context, '/editor');
               }
             },
@@ -188,7 +208,9 @@ class FileListPage extends StatelessWidget {
                     content: template.content,
                   );
                   await appState.openFile(file);
-                  Navigator.pushNamed(context, '/editor');
+                  if (context.mounted) {
+                    Navigator.pushNamed(context, '/editor');
+                  }
                 },
                 child: Container(
                   decoration: BoxDecoration(
@@ -235,9 +257,11 @@ class FileListPage extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               await context.read<AppState>().deleteFile(fileId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('文件已删除')),
-              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('文件已删除')),
+                );
+              }
             },
             child: const Text('删除', style: TextStyle(color: Colors.red)),
           ),
