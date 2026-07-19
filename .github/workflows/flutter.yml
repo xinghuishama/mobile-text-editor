@@ -16,30 +16,36 @@ jobs:
         with:
           flutter-version: '3.29.0'
 
+      # 1. 备份我们自己的核心代码（不要备份 android/ 等平台目录）
       - name: Backup core files
         run: |
           mkdir -p /tmp/backup
           cp -r lib assets pubspec.yaml /tmp/backup/
 
+      # 2. 删除所有文件（包括 android/），但保留 .git
       - name: Clean directory (keep .git)
         run: |
           find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} +
 
+      # 3. 创建全新的 Flutter 项目（生成完整的 android/ 结构）
       - name: Create fresh Flutter project
         run: flutter create . --project-name mobile_text_editor
 
+      # 4. 只恢复我们的 lib/、assets/、pubspec.yaml（不覆盖 android/）
       - name: Restore our code
-        run: cp -r /tmp/backup/* .
+        run: |
+          cp -r /tmp/backup/lib .
+          cp -r /tmp/backup/assets .
+          cp /tmp/backup/pubspec.yaml .
 
-      - name: Set NDK version to 27.0.12077973
+      # 5. 设置 NDK 版本
+      - name: Set NDK version
         run: |
           if [ -f android/app/build.gradle ]; then
             sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
           elif [ -f android/app/build.gradle.kts ]; then
             sed -i '/android {/a\    ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
           fi
-          # 备用方案：直接追加到文件末尾（如果上述方法无效）
-          echo 'android.ndkVersion = "27.0.12077973"' >> android/app/build.gradle 2>/dev/null || echo 'android.ndkVersion = "27.0.12077973"' >> android/app/build.gradle.kts 2>/dev/null || true
 
       - name: Install dependencies
         run: flutter pub get
@@ -57,5 +63,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: build/app/outputs/
-
+          path: build/app/outputs/flutter-apk/app-debug.apk
