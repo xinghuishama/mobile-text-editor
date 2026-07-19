@@ -19,11 +19,11 @@ class EditorWebView extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  EditorWebViewState createState() => EditorWebViewState();
+  _EditorWebViewState createState() => _EditorWebViewState();
 }
 
-class EditorWebViewState extends State<EditorWebView> {
-  late WebViewController _controller;
+class _EditorWebViewState extends State<EditorWebView> {
+  late final WebViewController _controller;
   bool _isLoaded = false;
   String _currentContent = '';
 
@@ -34,18 +34,16 @@ class EditorWebViewState extends State<EditorWebView> {
   }
 
   @override
-  void didUpdateWidget(EditorWebView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.fileId != widget.fileId) {
-      _loadContent();
-    } else if (oldWidget.content != widget.content && _isLoaded) {
-      _setEditorContent(widget.content);
-    }
-    if (oldWidget.isDarkMode != widget.isDarkMode && _isLoaded) {
-      _setTheme(widget.isDarkMode);
-    }
+  Widget build(BuildContext context) {
+    return WebViewWidget(
+      controller: _controller,
+    );
   }
 
+  // 注意：WebViewController 需要在 build 之前创建
+  // 但由于我们需要在 onWebViewCreated 中获取 controller，改用 WebView 的旧 API
+  // 但 webview_flutter 4.x 使用 WebViewWidget + controller
+  // 我们这里直接用 WebView 组件（兼容模式）
   @override
   Widget build(BuildContext context) {
     return WebView(
@@ -164,10 +162,6 @@ class EditorWebViewState extends State<EditorWebView> {
 
   void _setTheme(bool isDark) {
     _controller.runJavaScript('setTheme($isDark);');
-  }
-
-  void _loadContent() {
-    _setEditorContent(widget.content);
   }
 
   String _escapeJs(String s) {
