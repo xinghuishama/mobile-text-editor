@@ -32,6 +32,15 @@ class MyApp extends StatelessWidget {
               '/editor': (ctx) => const EditorPage(),
               '/settings': (ctx) => const SettingsPage(),
             },
+            // 处理未注册的路由（备选）
+            onGenerateRoute: (settings) {
+              if (settings.name == '/editor') {
+                return MaterialPageRoute(
+                  builder: (ctx) => const EditorPage(),
+                );
+              }
+              return null;
+            },
           );
         },
       ),
