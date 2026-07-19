@@ -14,13 +14,11 @@ class FileUtils {
 
   static String generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 
-  // 始终使用 UTF-8 读取
   static Future<String> readFile(String path) async {
     final file = File(path);
     return await file.readAsString(encoding: utf8);
   }
 
-  // 始终使用 UTF-8 写入
   static Future<void> writeFile(String path, String content) async {
     final file = File(path);
     await file.writeAsString(content, encoding: utf8);
@@ -51,12 +49,10 @@ class FileUtils {
     final file = result.files.single;
     final bytes = file.bytes!;
     final originalName = file.name;
-    // 复制到应用目录
     final dir = await getAppDir();
     final newPath = path.join(dir, originalName);
     final newFile = File(newPath);
     await newFile.writeAsBytes(bytes);
-    // 以 UTF-8 读取（可添加自动检测，此处简化）
     String content = utf8.decode(bytes, allowMalformed: true);
     return FileModel(
       id: generateId(),
@@ -70,7 +66,6 @@ class FileUtils {
   }
 
   static Future<void> saveFile(FileModel file, String encoding) async {
-    // 忽略 encoding，固定 UTF-8
     await writeFile(file.path, file.content);
   }
 

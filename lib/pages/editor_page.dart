@@ -12,7 +12,7 @@ class EditorPage extends StatefulWidget {
 
 class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final Map<String, GlobalKey<EditorWebViewState>> _webViewKeys = {};
+  final Map<String, GlobalKey> _webViewKeys = {};
 
   @override
   void initState() {
@@ -38,7 +38,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       // 为每个文件创建WebView key
       for (var file in appState.openedFiles) {
         if (!_webViewKeys.containsKey(file.id)) {
-          _webViewKeys[file.id] = GlobalKey<EditorWebViewState>();
+          _webViewKeys[file.id] = GlobalKey();
         }
       }
     }
