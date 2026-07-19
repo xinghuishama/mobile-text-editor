@@ -172,6 +172,16 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteFile(String fileId) async {
+  Future<void> renameFile(String fileId, String newName) async {
+    final file = savedFiles.firstWhere((f) => f.id == fileId);
+    final newPath = file.path.replaceAll(file.name, newName);
+    final newFile = File(newPath);
+    await file.file.rename(newPath);
+    file.name = newName;
+    file.path = newPath;
+    await _saveFileList();
+    notifyListeners();
+  }
     final file = savedFiles.firstWhere((f) => f.id == fileId);
     await FileUtils.deleteFile(file.path);
     savedFiles.removeWhere((f) => f.id == fileId);
