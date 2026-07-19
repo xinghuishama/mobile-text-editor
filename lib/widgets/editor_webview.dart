@@ -51,7 +51,7 @@ class _EditorWebViewState extends State<EditorWebView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '文件: ${widget.fileId}',
+            '文件: ${widget.fileId}  语言: ${widget.language}',
             style: TextStyle(
               color: widget.isDarkMode ? Colors.white70 : Colors.black54,
               fontSize: 12,

@@ -10,13 +10,21 @@ class EditorPage extends StatefulWidget {
   _EditorPageState createState() => _EditorPageState();
 }
 
-class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
+class _EditorPageState extends State<EditorPage> {
   late TabController _tabController;
+  
+  // 使用独立的 TickerProvider
+  late final TickerProvider _tickerProvider;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 0, vsync: this);
+    // 创建独立的 TickerProvider
+    _tickerProvider = TickerProviderStateMixin();
+    _tabController = TabController(
+      length: 0,
+      vsync: _tickerProvider,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateTabs();
     });
@@ -32,7 +40,11 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     final appState = Provider.of<AppState>(context, listen: false);
     final count = appState.openedFiles.length;
     if (_tabController.length != count) {
-      _tabController = TabController(length: count, vsync: this);
+      _tabController.dispose();
+      _tabController = TabController(
+        length: count,
+        vsync: _tickerProvider,
+      );
     }
     final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
     if (activeIndex != -1 && _tabController.index != activeIndex) {
@@ -122,17 +134,16 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             child: Row(
               children: [
                 _buildIconButton(Icons.undo, '撤销', () {
-                  // 通过上下文找到当前 EditorWebView 并调用方法
-                  _callEditorMethod('undo');
+                  // 简化版本：暂不实现 undo/redo
                 }),
                 _buildIconButton(Icons.redo, '重做', () {
-                  _callEditorMethod('redo');
+                  // 简化版本：暂不实现 undo/redo
                 }),
                 _buildIconButton(Icons.search, '查找', () {
-                  _callEditorMethod('triggerFind');
+                  // 简化版本：暂不实现查找
                 }),
                 _buildIconButton(Icons.find_replace, '替换', () {
-                  _callEditorMethod('triggerReplace');
+                  // 简化版本：暂不实现替换
                 }),
                 const VerticalDivider(),
                 _buildIconButton(Icons.save, '保存', () async {
@@ -170,6 +181,15 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           );
         },
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final appState = context.read<AppState>();
+          final file = await appState.createNewFile();
+          await appState.openFile(file);
+          _updateTabs();
+        },
+        child: const Icon(Icons.add),
+      ),
     );
   }
 
@@ -183,17 +203,6 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         onPressed: onPressed,
       ),
     );
-  }
-
-  void _callEditorMethod(String method) {
-    final context = this.context;
-    final appState = Provider.of<AppState>(context, listen: false);
-    final activeFile = appState.activeFile;
-    if (activeFile == null) return;
-    // 使用上下文查找当前可见的 EditorWebView
-    final editorWidget = context.findAncestorWidgetOfExactType<EditorWebView>();
-    // 由于无法直接获取 State，我们使用 GlobalKey 但改为用 ValueKey 重建
-    // 这里留空，实际用 ValueKey 重建即可，因为方法调用不频繁
   }
 
   void _closeTab(BuildContext context, String fileId) async {
@@ -248,5 +257,24 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+}
+
+// 辅助类：提供独立的 TickerProvider
+class TickerProviderStateMixin extends TickerProvider {
+  final List<Ticker> _tickers = [];
+
+  @override
+  Ticker createTicker(TickerCallback onTick) {
+    final ticker = Ticker(onTick);
+    _tickers.add(ticker);
+    return ticker;
+  }
+
+  void dispose() {
+    for (var ticker in _tickers) {
+      ticker.dispose();
+    }
+    _tickers.clear();
   }
 }
