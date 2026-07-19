@@ -4,6 +4,7 @@ import '../providers/app_state.dart';
 import '../models/file_model.dart';
 import '../models/file_template.dart';
 import 'editor_page.dart';
+import 'settings_page.dart';
 
 class FileListPage extends StatelessWidget {
   const FileListPage({Key? key}) : super(key: key);
