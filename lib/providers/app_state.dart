@@ -54,11 +54,7 @@ class AppState extends ChangeNotifier {
       content: content ?? '',
       encoding: defaultEncoding,
     );
-    // 如果指定了文件名，则重命名
-    if (fileName != null) {
-      final newPath = file.path.replaceAll(file.name, fileName);
-      // 简单重命名
-    }
+    // 确保文件被添加到 savedFiles
     savedFiles.add(file);
     await _saveFileList();
     notifyListeners();
@@ -77,15 +73,25 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> openFile(FileModel file) async {
+    // 如果文件已打开，切换到该标签
     if (openedFiles.any((f) => f.id == file.id)) {
       activeFileId = file.id;
       notifyListeners();
       return;
     }
+    // 检查上限
     if (openedFiles.length >= 5) {
       throw Exception('已达最大打开文件数 (5个)');
     }
-    final content = await FileUtils.readFile(file.path);
+    // 读取文件内容（如果还没有内容）
+    String content = file.content;
+    if (content.isEmpty) {
+      try {
+        content = await FileUtils.readFile(file.path);
+      } catch (_) {
+        content = '';
+      }
+    }
     final updatedFile = file.copyWith(content: content, isDirty: false);
     openedFiles.add(updatedFile);
     activeFileId = updatedFile.id;
@@ -99,6 +105,7 @@ class AppState extends ChangeNotifier {
     if (file.isDirty && !force) {
       throw Exception('文件未保存');
     }
+    // 如果是新建文件且未保存，从 savedFiles 移除
     if (file.isNewFile && !file.isDirty) {
       savedFiles.removeWhere((f) => f.id == fileId);
       await _saveFileList();
@@ -116,9 +123,13 @@ class AppState extends ChangeNotifier {
     await FileUtils.saveFile(file, enc);
     final index = openedFiles.indexWhere((f) => f.id == fileId);
     openedFiles[index] = file.copyWith(isDirty: false, encoding: enc);
+    // 更新 savedFiles 中的对应条目
     final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
     if (savedIndex != -1) {
       savedFiles[savedIndex] = openedFiles[index];
+    } else {
+      // 如果是新建文件，添加到 savedFiles
+      savedFiles.add(openedFiles[index]);
     }
     await _saveFileList();
     notifyListeners();
@@ -155,6 +166,7 @@ class AppState extends ChangeNotifier {
         content: content,
         isDirty: true,
       );
+      // 更新 savedFiles 中对应的条目（如果存在）
       final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
       if (savedIndex != -1) {
         savedFiles[savedIndex] = openedFiles[index];

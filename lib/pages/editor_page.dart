@@ -11,12 +11,11 @@ class EditorPage extends StatefulWidget {
 }
 
 class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 0, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateTabs();
     });
@@ -31,13 +30,24 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   void _updateTabs() {
     final appState = Provider.of<AppState>(context, listen: false);
     final count = appState.openedFiles.length;
-    if (_tabController.length != count) {
-      _tabController.dispose();
-      _tabController = TabController(length: count, vsync: this);
+    
+    // 如果 _tabController 已存在且长度相同，不做任何事
+    if (_tabController != null && _tabController!.length == count) {
+      final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
+      if (activeIndex != -1 && _tabController!.index != activeIndex) {
+        _tabController!.animateTo(activeIndex);
+      }
+      return;
     }
+
+    // 否则，dispose 旧的并创建新的
+    if (_tabController != null) {
+      _tabController!.dispose();
+    }
+    _tabController = TabController(length: count, vsync: this);
     final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
-    if (activeIndex != -1 && _tabController.index != activeIndex) {
-      _tabController.animateTo(activeIndex);
+    if (activeIndex != -1) {
+      _tabController!.index = activeIndex;
     }
     setState(() {});
   }
@@ -52,7 +62,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           child: Consumer<AppState>(
             builder: (context, appState, child) {
               final opened = appState.openedFiles;
-              if (opened.isEmpty) {
+              if (opened.isEmpty || _tabController == null) {
                 return const SizedBox.shrink();
               }
               return TabBar(
@@ -168,6 +178,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           final file = await appState.createNewFile();
           await appState.openFile(file);
           _updateTabs();
+          // 不导航，留在编辑器页
         },
         child: const Icon(Icons.add),
       ),
@@ -236,7 +247,9 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
 
   @override
   void dispose() {
-    _tabController.dispose();
+    if (_tabController != null) {
+      _tabController!.dispose();
+    }
     super.dispose();
   }
 }
