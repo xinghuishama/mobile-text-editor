@@ -34,14 +34,8 @@ jobs:
           cp -r /tmp/backup/assets .
           cp /tmp/backup/pubspec.yaml .
 
-      - name: Re-add dependencies
-        run: |
-          flutter pub add webview_flutter
-          flutter pub add provider
-          flutter pub add shared_preferences
-          flutter pub add path_provider
-          flutter pub add file_picker
-          flutter pub get
+      - name: Install dependencies (using our pubspec.yaml)
+        run: flutter pub get
 
       - name: Set NDK version
         run: |

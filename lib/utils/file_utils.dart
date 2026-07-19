@@ -41,28 +41,32 @@ class FileUtils {
   }
 
   static Future<FileModel?> openExternalFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-    );
-    if (result == null) return null;
-    final file = result.files.single;
-    final bytes = file.bytes!;
-    final originalName = file.name;
-    final dir = await getAppDir();
-    final newPath = path.join(dir, originalName);
-    final newFile = File(newPath);
-    await newFile.writeAsBytes(bytes);
-    String content = utf8.decode(bytes, allowMalformed: true);
-    return FileModel(
-      id: generateId(),
-      name: originalName,
-      path: newPath,
-      content: content,
-      encoding: 'UTF-8',
-      isDirty: false,
-      isNewFile: false,
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+      if (result == null) return null;
+      final file = result.files.single;
+      final bytes = file.bytes!;
+      final originalName = file.name;
+      final dir = await getAppDir();
+      final newPath = path.join(dir, originalName);
+      final newFile = File(newPath);
+      await newFile.writeAsBytes(bytes);
+      String content = utf8.decode(bytes, allowMalformed: true);
+      return FileModel(
+        id: generateId(),
+        name: originalName,
+        path: newPath,
+        content: content,
+        encoding: 'UTF-8',
+        isDirty: false,
+        isNewFile: false,
+      );
+    } catch (e) {
+      return null;
+    }
   }
 
   static Future<void> saveFile(FileModel file, String encoding) async {
@@ -70,13 +74,17 @@ class FileUtils {
   }
 
   static Future<String?> saveAsFile(FileModel file, {String? encoding}) async {
-    String? outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: '保存文件',
-      fileName: file.name,
-    );
-    if (outputPath == null) return null;
-    await writeFile(outputPath, file.content);
-    return outputPath;
+    try {
+      String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: '保存文件',
+        fileName: file.name,
+      );
+      if (outputPath == null) return null;
+      await writeFile(outputPath, file.content);
+      return outputPath;
+    } catch (e) {
+      return null;
+    }
   }
 
   static Future<void> deleteFile(String filePath) async {
