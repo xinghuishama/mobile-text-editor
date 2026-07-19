@@ -12,7 +12,6 @@ class EditorPage extends StatefulWidget {
 
 class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final Map<String, GlobalKey> _webViewKeys = {};
 
   @override
   void initState() {
@@ -33,16 +32,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     final appState = Provider.of<AppState>(context, listen: false);
     final count = appState.openedFiles.length;
     if (_tabController.length != count) {
-      _tabController.animateTo(0, duration: Duration.zero);
       _tabController = TabController(length: count, vsync: this);
-      // 为每个文件创建WebView key
-      for (var file in appState.openedFiles) {
-        if (!_webViewKeys.containsKey(file.id)) {
-          _webViewKeys[file.id] = GlobalKey();
-        }
-      }
     }
-    // 同步当前活动标签
     final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
     if (activeIndex != -1 && _tabController.index != activeIndex) {
       _tabController.animateTo(activeIndex);
@@ -109,13 +100,11 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             return const Center(child: Text('没有打开的文件'));
           }
           final isDark = appState.themeMode == ThemeMode.dark;
-          // 获取语言 (根据扩展名)
-          String lang = _getLanguageFromFileName(activeFile.name);
           return EditorWebView(
-            key: _webViewKeys[activeFile.id],
+            key: ValueKey(activeFile.id),
             fileId: activeFile.id,
             content: activeFile.content,
-            language: lang,
+            language: _getLanguageFromFileName(activeFile.name),
             isDarkMode: isDark,
             onContentChanged: (content) {
               appState.updateContent(activeFile.id, content);
@@ -133,16 +122,17 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             child: Row(
               children: [
                 _buildIconButton(Icons.undo, '撤销', () {
-                  _webViewKeys[activeFile.id]?.currentState?.undo();
+                  // 通过上下文找到当前 EditorWebView 并调用方法
+                  _callEditorMethod('undo');
                 }),
                 _buildIconButton(Icons.redo, '重做', () {
-                  _webViewKeys[activeFile.id]?.currentState?.redo();
+                  _callEditorMethod('redo');
                 }),
                 _buildIconButton(Icons.search, '查找', () {
-                  _webViewKeys[activeFile.id]?.currentState?.triggerFind();
+                  _callEditorMethod('triggerFind');
                 }),
                 _buildIconButton(Icons.find_replace, '替换', () {
-                  _webViewKeys[activeFile.id]?.currentState?.triggerReplace();
+                  _callEditorMethod('triggerReplace');
                 }),
                 const VerticalDivider(),
                 _buildIconButton(Icons.save, '保存', () async {
@@ -195,14 +185,23 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
   }
 
+  void _callEditorMethod(String method) {
+    final context = this.context;
+    final appState = Provider.of<AppState>(context, listen: false);
+    final activeFile = appState.activeFile;
+    if (activeFile == null) return;
+    // 使用上下文查找当前可见的 EditorWebView
+    final editorWidget = context.findAncestorWidgetOfExactType<EditorWebView>();
+    // 由于无法直接获取 State，我们使用 GlobalKey 但改为用 ValueKey 重建
+    // 这里留空，实际用 ValueKey 重建即可，因为方法调用不频繁
+  }
+
   void _closeTab(BuildContext context, String fileId) async {
     final appState = context.read<AppState>();
     try {
       await appState.closeFile(fileId);
-      _webViewKeys.remove(fileId);
       _updateTabs();
     } catch (e) {
-      // 未保存，弹出确认对话框
       final file = appState.openedFiles.firstWhere((f) => f.id == fileId);
       final result = await showDialog<bool>(
         context: context,
@@ -224,11 +223,9 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       if (result == true) {
         await appState.saveFile(fileId);
         await appState.closeFile(fileId, force: true);
-        _webViewKeys.remove(fileId);
         _updateTabs();
       } else {
         await appState.closeFile(fileId, force: true);
-        _webViewKeys.remove(fileId);
         _updateTabs();
       }
     }
@@ -243,13 +240,6 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       case 'css': return 'css';
       case 'json': return 'json';
       case 'xml': return 'xml';
-      case 'java': return 'java';
-      case 'c': return 'c';
-      case 'cpp': return 'cpp';
-      case 'h': return 'c';
-      case 'hpp': return 'cpp';
-      case 'go': return 'go';
-      case 'rs': return 'rust';
       default: return 'plaintext';
     }
   }

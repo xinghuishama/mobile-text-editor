@@ -34,13 +34,14 @@ jobs:
           cp -r /tmp/backup/assets .
           cp /tmp/backup/pubspec.yaml .
 
-      - name: Re-add webview_flutter dependency
+      - name: Re-add dependencies
         run: |
           flutter pub add webview_flutter
           flutter pub add provider
           flutter pub add shared_preferences
           flutter pub add path_provider
           flutter pub add file_picker
+          flutter pub get
 
       - name: Set NDK version
         run: |
@@ -50,9 +51,6 @@ jobs:
           elif [ -f build.gradle.kts ]; then
             sed -i '/android {/a\    ndkVersion = "27.0.12077973"' build.gradle.kts
           fi
-
-      - name: Install dependencies
-        run: flutter pub get
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
