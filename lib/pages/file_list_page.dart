@@ -22,8 +22,6 @@ class FileListPage extends StatelessWidget {
       body: Consumer<AppState>(
         builder: (context, appState, child) {
           final files = appState.savedFiles;
-          
-          // 最近文件（按修改时间排序取前3）
           final recentFiles = files.isNotEmpty
               ? files.reversed.take(3).toList()
               : <FileModel>[];
@@ -43,7 +41,6 @@ class FileListPage extends StatelessWidget {
 
           return ListView(
             children: [
-              // 最近文件区域
               if (recentFiles.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.all(16),
@@ -87,7 +84,7 @@ class FileListPage extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                _getFileIcon(file.name),
+                                Icons.insert_drive_file,
                                 color: Colors.blue,
                                 size: 24,
                               ),
@@ -107,11 +104,9 @@ class FileListPage extends StatelessWidget {
                 ),
                 const Divider(),
               ],
-
-              // 所有文件列表
               ...files.map((file) {
                 return ListTile(
-                  leading: Icon(_getFileIcon(file.name)),
+                  leading: const Icon(Icons.insert_drive_file),
                   title: Text(file.name),
                   subtitle: Text(
                     file.path.split('/').last,
@@ -120,10 +115,6 @@ class FileListPage extends StatelessWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 20),
-                        onPressed: () => _showRenameDialog(context, file),
-                      ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                         onPressed: () => _showDeleteConfirm(context, file.id),
@@ -171,21 +162,6 @@ class FileListPage extends StatelessWidget {
     );
   }
 
-  IconData _getFileIcon(String fileName) {
-    final ext = fileName.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'html': return Icons.html;
-      case 'css': return Icons.css;
-      case 'js': return Icons.javascript;
-      case 'jsx': return Icons.react;
-      case 'py': return Icons.code;
-      case 'json': return Icons.data_object;
-      case 'md': return Icons.description;
-      case 'sh': return Icons.terminal;
-      default: return Icons.insert_drive_file;
-    }
-  }
-
   void _showTemplateDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -208,10 +184,8 @@ class FileListPage extends StatelessWidget {
                 onTap: () async {
                   Navigator.pop(ctx);
                   final appState = context.read<AppState>();
-                  final fileName = '${template.name}.${template.extension}';
                   final file = await appState.createNewFile(
                     content: template.content,
-                    fileName: fileName,
                   );
                   await appState.openFile(file);
                   Navigator.pushNamed(context, '/editor');
@@ -227,8 +201,8 @@ class FileListPage extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        _getTemplateIcon(template.name),
+                      const Icon(
+                        Icons.insert_drive_file,
                         size: 32,
                         color: Colors.blue,
                       ),
@@ -245,63 +219,6 @@ class FileListPage extends StatelessWidget {
             },
           ),
         ),
-      ),
-    );
-  }
-
-  IconData _getTemplateIcon(String name) {
-    switch (name) {
-      case 'HTML': return Icons.html;
-      case 'React': return Icons.react;
-      case 'Python': return Icons.code;
-      case 'JavaScript': return Icons.javascript;
-      case 'TypeScript': return Icons.code;
-      case 'CSS': return Icons.css;
-      case 'JSON': return Icons.data_object;
-      case 'Markdown': return Icons.description;
-      case 'Shell': return Icons.terminal;
-      default: return Icons.insert_drive_file;
-    }
-  }
-
-  void _showRenameDialog(BuildContext context, FileModel file) {
-    final TextEditingController controller = TextEditingController(text: file.name);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('重命名'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: '文件名'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.isEmpty) return;
-              // 检查重名
-              final appState = context.read<AppState>();
-              final exists = appState.savedFiles.any((f) => f.name == newName && f.id != file.id);
-              if (exists) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('文件已存在')),
-                );
-                return;
-              }
-              await appState.renameFile(file.id, newName);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('重命名成功')),
-              );
-            },
-            child: const Text('确定'),
-          ),
-        ],
       ),
     );
   }

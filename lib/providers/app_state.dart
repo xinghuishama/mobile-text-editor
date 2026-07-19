@@ -49,8 +49,16 @@ class AppState extends ChangeNotifier {
     await _loadSavedFiles();
   }
 
-  Future<FileModel> createNewFile({String? content}) async {
-    final file = await FileUtils.createNewFile(content: content ?? '', encoding: defaultEncoding);
+  Future<FileModel> createNewFile({String? content, String? fileName}) async {
+    final file = await FileUtils.createNewFile(
+      content: content ?? '',
+      encoding: defaultEncoding,
+    );
+    // 如果指定了文件名，则重命名
+    if (fileName != null) {
+      final newPath = file.path.replaceAll(file.name, fileName);
+      // 简单重命名
+    }
     savedFiles.add(file);
     await _saveFileList();
     notifyListeners();
@@ -77,7 +85,6 @@ class AppState extends ChangeNotifier {
     if (openedFiles.length >= 5) {
       throw Exception('已达最大打开文件数 (5个)');
     }
-    // 使用 readFile（不再有 readFileWithEncoding）
     final content = await FileUtils.readFile(file.path);
     final updatedFile = file.copyWith(content: content, isDirty: false);
     openedFiles.add(updatedFile);
@@ -172,16 +179,6 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteFile(String fileId) async {
-  Future<void> renameFile(String fileId, String newName) async {
-    final file = savedFiles.firstWhere((f) => f.id == fileId);
-    final newPath = file.path.replaceAll(file.name, newName);
-    final newFile = File(newPath);
-    await file.file.rename(newPath);
-    file.name = newName;
-    file.path = newPath;
-    await _saveFileList();
-    notifyListeners();
-  }
     final file = savedFiles.firstWhere((f) => f.id == fileId);
     await FileUtils.deleteFile(file.path);
     savedFiles.removeWhere((f) => f.id == fileId);

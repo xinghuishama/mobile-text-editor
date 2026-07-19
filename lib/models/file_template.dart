@@ -70,7 +70,7 @@ console.log("Hello World");''',
       language: 'typescript',
       content: '''// TypeScript 文件
 const greet = (name: string): void => {
-  console.log(`Hello, ${name}`);
+  console.log("Hello, " + name);
 };
 
 greet("World");''',
