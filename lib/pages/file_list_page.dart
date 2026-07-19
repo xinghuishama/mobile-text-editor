@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../models/file_model.dart';
 import '../models/file_template.dart';
+import 'editor_page.dart';
 
 class FileListPage extends StatelessWidget {
   const FileListPage({Key? key}) : super(key: key);
@@ -24,7 +25,10 @@ class FileListPage extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (ctx) => const SettingsPage()),
+            ),
           ),
         ],
       ),
@@ -76,7 +80,10 @@ class FileListPage extends StatelessWidget {
                           try {
                             await appState.openFile(file);
                             if (context.mounted) {
-                              Navigator.pushNamed(context, '/editor');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (ctx) => const EditorPage()),
+                              );
                             }
                           } catch (e) {
                             if (context.mounted) {
@@ -143,7 +150,10 @@ class FileListPage extends StatelessWidget {
                     try {
                       await appState.openFile(file);
                       if (context.mounted) {
-                        Navigator.pushNamed(context, '/editor');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (ctx) => const EditorPage()),
+                        );
                       }
                     } catch (e) {
                       if (context.mounted) {
@@ -175,7 +185,10 @@ class FileListPage extends StatelessWidget {
               final file = await appState.openExternalFile();
               if (file != null && context.mounted) {
                 await appState.openFile(file);
-                Navigator.pushNamed(context, '/editor');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (ctx) => const EditorPage()),
+                );
               }
             },
             child: const Icon(Icons.folder_open),
@@ -212,7 +225,10 @@ class FileListPage extends StatelessWidget {
                   );
                   await appState.openFile(file);
                   if (context.mounted) {
-                    Navigator.pushNamed(context, '/editor');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (ctx) => const EditorPage()),
+                    );
                   }
                 },
                 child: Container(
