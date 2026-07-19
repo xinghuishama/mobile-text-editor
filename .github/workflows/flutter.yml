@@ -34,7 +34,7 @@ jobs:
           cp -r /tmp/backup/assets .
           cp /tmp/backup/pubspec.yaml .
 
-      - name: Install dependencies (using our pubspec.yaml)
+      - name: Install dependencies
         run: flutter pub get
 
       - name: Set NDK version
