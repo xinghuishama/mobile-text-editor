@@ -31,15 +31,15 @@ jobs:
       - name: Restore our code
         run: cp -r /tmp/backup/* .
 
-      - name: Set NDK version (for build.gradle.kts)
+      - name: Set NDK version to 27.0.12077973
         run: |
-          if [ -f android/app/build.gradle.kts ]; then
-            sed -i '/android {/a\    ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
-          elif [ -f android/app/build.gradle ]; then
+          if [ -f android/app/build.gradle ]; then
             sed -i '/android {/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
-          else
-            echo "No build.gradle found"
+          elif [ -f android/app/build.gradle.kts ]; then
+            sed -i '/android {/a\    ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
           fi
+          # 备用方案：直接追加到文件末尾（如果上述方法无效）
+          echo 'android.ndkVersion = "27.0.12077973"' >> android/app/build.gradle 2>/dev/null || echo 'android.ndkVersion = "27.0.12077973"' >> android/app/build.gradle.kts 2>/dev/null || true
 
       - name: Install dependencies
         run: flutter pub get
@@ -57,4 +57,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: build/app/outputs/
+
