@@ -10,21 +10,13 @@ class EditorPage extends StatefulWidget {
   _EditorPageState createState() => _EditorPageState();
 }
 
-class _EditorPageState extends State<EditorPage> {
+class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
-  // 使用独立的 TickerProvider
-  late final TickerProvider _tickerProvider;
 
   @override
   void initState() {
     super.initState();
-    // 创建独立的 TickerProvider
-    _tickerProvider = TickerProviderStateMixin();
-    _tabController = TabController(
-      length: 0,
-      vsync: _tickerProvider,
-    );
+    _tabController = TabController(length: 0, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateTabs();
     });
@@ -41,10 +33,7 @@ class _EditorPageState extends State<EditorPage> {
     final count = appState.openedFiles.length;
     if (_tabController.length != count) {
       _tabController.dispose();
-      _tabController = TabController(
-        length: count,
-        vsync: _tickerProvider,
-      );
+      _tabController = TabController(length: count, vsync: this);
     }
     final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
     if (activeIndex != -1 && _tabController.index != activeIndex) {
@@ -133,18 +122,10 @@ class _EditorPageState extends State<EditorPage> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
               children: [
-                _buildIconButton(Icons.undo, '撤销', () {
-                  // 简化版本：暂不实现 undo/redo
-                }),
-                _buildIconButton(Icons.redo, '重做', () {
-                  // 简化版本：暂不实现 undo/redo
-                }),
-                _buildIconButton(Icons.search, '查找', () {
-                  // 简化版本：暂不实现查找
-                }),
-                _buildIconButton(Icons.find_replace, '替换', () {
-                  // 简化版本：暂不实现替换
-                }),
+                _buildIconButton(Icons.undo, '撤销', () {}),
+                _buildIconButton(Icons.redo, '重做', () {}),
+                _buildIconButton(Icons.search, '查找', () {}),
+                _buildIconButton(Icons.find_replace, '替换', () {}),
                 const VerticalDivider(),
                 _buildIconButton(Icons.save, '保存', () async {
                   try {
@@ -257,24 +238,5 @@ class _EditorPageState extends State<EditorPage> {
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-}
-
-// 辅助类：提供独立的 TickerProvider
-class TickerProviderStateMixin extends TickerProvider {
-  final List<Ticker> _tickers = [];
-
-  @override
-  Ticker createTicker(TickerCallback onTick) {
-    final ticker = Ticker(onTick);
-    _tickers.add(ticker);
-    return ticker;
-  }
-
-  void dispose() {
-    for (var ticker in _tickers) {
-      ticker.dispose();
-    }
-    _tickers.clear();
   }
 }
