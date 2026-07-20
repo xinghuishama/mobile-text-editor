@@ -20,6 +20,7 @@ class EditorPage extends StatefulWidget {
 
 class _EditorPageState extends State<EditorPage> {
   final GlobalKey<EditorWebViewState> _editorKey = GlobalKey<EditorWebViewState>();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ValueNotifier<_CursorInfo> _cursor =
       ValueNotifier(const _CursorInfo());
   final ValueNotifier<int> _charCount = ValueNotifier(0);
@@ -142,7 +143,6 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _closeTab(String fileId) async {
     final appState = context.read<AppState>();
-    // 关闭的是当前标签时先同步内容，确保 dirty 判断基于最新内容
     if (appState.activeFileId == fileId) {
       await _syncCurrentContent();
     }
@@ -181,6 +181,47 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  /// 关闭除当前外的所有标签（未保存的逐个询问）
+  Future<void> _closeOtherTabs() async {
+    final appState = context.read<AppState>();
+    final others = appState.openedFiles
+        .where((f) => f.id != appState.activeFileId)
+        .map((f) => f.id)
+        .toList();
+    for (final id in others) {
+      await _closeTab(id);
+      if (!mounted) return;
+    }
+  }
+
+  /// 新建文件并打开
+  Future<void> _newFile() async {
+    final appState = context.read<AppState>();
+    try {
+      final file = await appState.createNewFile();
+      await appState.openFile(file);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  /// 打开外部文件
+  Future<void> _openExternal() async {
+    final appState = context.read<AppState>();
+    try {
+      final file = await appState.openExternalFile();
+      if (file != null) await appState.openFile(file);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -189,17 +230,83 @@ class _EditorPageState extends State<EditorPage> {
 
     return WillPopScope(
       onWillPop: () async {
+        // 查找栏可见时，返回键先关闭查找栏
+        if (_findBarVisible) {
+          setState(() => _findBarVisible = false);
+          return false;
+        }
         await _syncCurrentContent();
         return true;
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _buildDrawer(appState),
         appBar: AppBar(
+          // 标题栏：左侧菜单键，标题 = 当前文件名，右侧常用操作
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: '菜单',
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           title: Text(activeFile == null
               ? '编辑器'
               : '${activeFile.name}${activeFile.isDirty ? ' ●' : ''}'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.save),
+              tooltip: '保存',
+              onPressed: activeFile == null ? null : _save,
+            ),
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: '查找替换',
+              onPressed: activeFile == null
+                  ? null
+                  : () {
+                      // 打开查找栏前先收起系统键盘，避免输入法挡住查找栏
+                      if (!_findBarVisible) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      }
+                      setState(() => _findBarVisible = !_findBarVisible);
+                    },
+            ),
+            PopupMenuButton<String>(
+              tooltip: '更多',
+              onSelected: (value) {
+                switch (value) {
+                  case 'save_as': _saveAs(); break;
+                  case 'goto_line': _gotoLine(); break;
+                  case 'encoding': _changeEncoding(); break;
+                  case 'close_others': _closeOtherTabs(); break;
+                  case 'theme':
+                    appState.setThemeMode(appState.themeMode == ThemeMode.dark
+                        ? ThemeMode.light
+                        : ThemeMode.dark);
+                    break;
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(value: 'save_as', child: Text('另存为')),
+                const PopupMenuItem(value: 'goto_line', child: Text('跳转到行')),
+                const PopupMenuItem(value: 'encoding', child: Text('保存编码')),
+                const PopupMenuItem(value: 'close_others', child: Text('关闭其他标签')),
+                PopupMenuItem(
+                  value: 'theme',
+                  child: Text(isDark ? '切换为亮色主题' : '切换为暗色主题'),
+                ),
+              ],
+            ),
+          ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(40),
-            child: _buildTabBar(appState),
+            preferredSize: const Size.fromHeight(41),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTabBar(appState),
+                // 标题栏/Tab 与编辑区之间的分隔线
+                const Divider(height: 1, thickness: 1),
+              ],
+            ),
           ),
         ),
         body: activeFile == null
@@ -234,6 +341,7 @@ class _EditorPageState extends State<EditorPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 查找栏贴工具栏上方 = 键盘弹起时直接位于键盘顶部，不会被遮挡
                     if (_findBarVisible)
                       FindReplaceBar(
                         editorKey: _editorKey,
@@ -245,6 +353,66 @@ class _EditorPageState extends State<EditorPage> {
                   ],
                 ),
               ),
+      ),
+    );
+  }
+
+  /// 侧边抽屉：文件与设置导航
+  Widget _buildDrawer(AppState appState) {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              child: const Align(
+                alignment: Alignment.bottomLeft,
+                child: Text(
+                  '移动端文本编辑器',
+                  style: TextStyle(color: Colors.white, fontSize: 20),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.note_add),
+              title: const Text('新建文件'),
+              onTap: () {
+                Navigator.pop(context);
+                _newFile();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: const Text('打开文件'),
+              onTap: () {
+                Navigator.pop(context);
+                _openExternal();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list_alt),
+              title: const Text('文件列表'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _syncCurrentContent();
+                if (!mounted) return;
+                Navigator.popUntil(context, ModalRoute.withName('/'));
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('设置'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -327,6 +495,9 @@ class _EditorPageState extends State<EditorPage> {
           _toolBtn(Icons.undo, '撤销', () => _editorKey.currentState?.undo()),
           _toolBtn(Icons.redo, '重做', () => _editorKey.currentState?.redo()),
           _toolBtn(Icons.search, '查找替换', () {
+            if (!_findBarVisible) {
+              FocusManager.instance.primaryFocus?.unfocus();
+            }
             setState(() => _findBarVisible = !_findBarVisible);
           }),
           _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),

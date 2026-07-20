@@ -21,6 +21,7 @@ class FindReplaceBar extends StatefulWidget {
 class _FindReplaceBarState extends State<FindReplaceBar> {
   final TextEditingController _findCtrl = TextEditingController();
   final TextEditingController _replaceCtrl = TextEditingController();
+  final FocusNode _findFocus = FocusNode();
   Timer? _debounce;
 
   bool _matchCase = false;
@@ -34,6 +35,7 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
     _debounce?.cancel();
     _findCtrl.dispose();
     _replaceCtrl.dispose();
+    _findFocus.dispose();
     super.dispose();
   }
 
@@ -98,14 +100,14 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(
-          width: 34, height: 34,
+          width: 30, height: 32,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? color.withOpacity(0.25) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: active ? color : Colors.grey, width: 1),
           ),
-          child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+          child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
               color: active ? color : Colors.grey)),
         ),
       ),
@@ -119,16 +121,17 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
       elevation: 4,
       color: theme.colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 查找行：输入框占满剩余空间
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _findCtrl,
-                    autofocus: true,
+                    focusNode: _findFocus,
                     style: const TextStyle(fontSize: 14),
                     decoration: const InputDecoration(
                       hintText: '查找',
@@ -139,51 +142,64 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
                     onChanged: (_) => _onQueryChanged(),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 _toggleButton('Aa', '区分大小写', _matchCase, () {
                   setState(() => _matchCase = !_matchCase);
                   _doFind();
                 }),
-                const SizedBox(width: 4),
+                const SizedBox(width: 3),
                 _toggleButton('.*', '正则表达式', _isRegex, () {
                   setState(() => _isRegex = !_isRegex);
                   _doFind();
                 }),
-                const SizedBox(width: 4),
+                const SizedBox(width: 3),
                 _toggleButton('ab', '全词匹配', _wholeWord, () {
                   setState(() => _wholeWord = !_wholeWord);
                   _doFind();
                 }),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 SizedBox(
-                  width: 44,
+                  width: 40,
                   child: Text(
                     _count > 0 ? '${_index + 1}/$_count' : (_findCtrl.text.isEmpty ? '' : '0'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 11),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_up),
-                  onPressed: _count > 0 ? _findPrev : null,
-                  tooltip: '上一个',
+                SizedBox(
+                  width: 36, height: 36,
+                  child: IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                    padding: EdgeInsets.zero,
+                    onPressed: _count > 0 ? _findPrev : null,
+                    tooltip: '上一个',
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_down),
-                  onPressed: _count > 0 ? _findNext : null,
-                  tooltip: '下一个',
+                SizedBox(
+                  width: 36, height: 36,
+                  child: IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                    padding: EdgeInsets.zero,
+                    onPressed: _count > 0 ? _findNext : null,
+                    tooltip: '下一个',
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    widget.editorKey.currentState?.closeFind();
-                    widget.onClose();
-                  },
-                  tooltip: '关闭',
+                SizedBox(
+                  width: 36, height: 36,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      widget.editorKey.currentState?.closeFind();
+                      widget.onClose();
+                    },
+                    tooltip: '关闭',
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
+            // 替换行：输入框占满剩余空间
             Row(
               children: [
                 Expanded(
@@ -191,20 +207,27 @@ class _FindReplaceBarState extends State<FindReplaceBar> {
                     controller: _replaceCtrl,
                     style: const TextStyle(fontSize: 14),
                     decoration: const InputDecoration(
-                      hintText: '替换为（正则模式可用 \$1 引用分组）',
+                      hintText: '替换为（正则可用 \$1 引用分组）',
                       isDense: true,
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
                 TextButton(
                   onPressed: _count > 0 ? _replaceCurrent : null,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(44, 34),
+                  ),
                   child: const Text('替换'),
                 ),
                 TextButton(
                   onPressed: _count > 0 ? _replaceAll : null,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(44, 34),
+                  ),
                   child: const Text('全部替换'),
                 ),
               ],
