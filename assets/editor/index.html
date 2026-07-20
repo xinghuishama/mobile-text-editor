@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Editor</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #1e1e1e;
+  }
+  #container { width: 100%; height: 100%; }
+
+  /* ---------- fallback 编辑器 ---------- */
+  #fallback { display: none; width: 100%; height: 100%; flex-direction: row; }
+  #fallback.visible { display: flex; }
+  #gutter {
+    flex: 0 0 auto; min-width: 44px; padding: 8px 6px 8px 0;
+    text-align: right; overflow: hidden; user-select: none;
+    font-family: Consolas, 'Courier New', monospace; font-size: 14px; line-height: 1.5;
+    box-sizing: border-box; white-space: pre;
+  }
+  #ta {
+    flex: 1 1 auto; border: 0; outline: none; resize: none;
+    padding: 8px; margin: 0; box-sizing: border-box;
+    font-family: Consolas, 'Courier New', monospace; font-size: 14px; line-height: 1.5;
+    white-space: pre; overflow: auto; tab-size: 4;
+  }
+  body.dark { background: #1e1e1e; }
+  body.dark #gutter { background: #252526; color: #858585; }
+  body.dark #ta { background: #1e1e1e; color: #d4d4d4; caret-color: #aeafad; }
+  body.light { background: #ffffff; }
+  body.light #gutter { background: #f3f3f3; color: #237893; }
+  body.light #ta { background: #ffffff; color: #000000; caret-color: #000; }
+
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #888; font: 13px/1.4 sans-serif; z-index: 5; pointer-events: none;
+  }
+  #test-results {
+    position: absolute; left: 0; right: 0; top: 0; z-index: 99;
+    font: 12px/1.5 monospace; padding: 8px; max-height: 60%; overflow: auto;
+    background: #fff; color: #000; display: none; white-space: pre-wrap;
+  }
+</style>
+</head>
+<body class="dark">
+<div id="container"></div>
+<div id="fallback">
+  <div id="gutter">1</div>
+  <textarea id="ta" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"></textarea>
+</div>
+<div id="loading">编辑器加载中…</div>
+<pre id="test-results"></pre>
+
+<script>
+'use strict';
+/* ============================================================
+ * Flutter <-> JS 桥接协议
+ * JS -> Flutter:  EditorBridge.postMessage(JSON 字符串)
+ *   {type:'ready', mode:'monaco'|'fallback'}
+ *   {type:'content', text:'...'}      (内容变化, 200ms 防抖)
+ *   {type:'cursor', line, column, selected}
+ * Flutter -> JS:  window.editorApi.xxx(...)
+ * ============================================================ */
+
+var params = new URLSearchParams(location.search);
+var FORCE_FALLBACK = params.get('forceFallback') === '1';
+var SELFTEST = params.get('selftest') === '1';
+
+function postToFlutter(obj) {
+  try {
+    if (window.EditorBridge && typeof window.EditorBridge.postMessage === 'function') {
+      window.EditorBridge.postMessage(JSON.stringify(obj));
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/* ------------------------------------------------------------
+ * Monaco 模式
+ * ---------------------------------------------------------- */
+var monacoEditor = null;
+
+function initMonaco() {
+  document.getElementById('loading').style.display = 'none';
+  monacoEditor = monaco.editor.create(document.getElementById('container'), {
+    value: '',
+    language: 'plaintext',
+    theme: document.body.classList.contains('dark') ? 'vs-dark' : 'vs',
+    fontSize: 14,
+    lineHeight: 21,
+    minimap: { enabled: false },
+    automaticLayout: true,
+    folding: true,
+    lineNumbers: 'on',
+    scrollBeyondLastLine: false,
+    wordWrap: 'off',
+    tabSize: 4,
+    insertSpaces: true,
+    matchBrackets: 'always',
+    autoClosingBrackets: 'languageDefined',
+    autoClosingQuotes: 'languageDefined',
+    fixedOverflowWidgets: true,
+    renderLineHighlight: 'line',
+    scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 }
+  });
+
+  var contentTimer = null;
+  monacoEditor.onDidChangeModelContent(function () {
+    if (contentTimer) clearTimeout(contentTimer);
+    contentTimer = setTimeout(function () {
+      postToFlutter({ type: 'content', text: monacoEditor.getValue() });
+      sendCursor();
+    }, 200);
+  });
+  monacoEditor.onDidChangeCursorPosition(sendCursor);
+  monacoEditor.onDidChangeCursorSelection(sendCursor);
+
+  function sendCursor() {
+    var pos = monacoEditor.getPosition();
+    var sel = monacoEditor.getSelection();
+    var model = monacoEditor.getModel();
+    if (!pos || !model) return;
+    var selected = sel ? model.getValueLengthInRange(sel) : 0;
+    postToFlutter({ type: 'cursor', line: pos.lineNumber, column: pos.column, selected: selected });
+  }
+
+  postToFlutter({ type: 'ready', mode: 'monaco' });
+}
+
+/* Monaco 查找状态 */
+var mMatches = [];
+var mIndex = -1;
+var mLastQuery = null;
+
+function monacoFind(query, matchCase, isRegex, wholeWord) {
+  if (!monacoEditor) return { count: 0, index: -1 };
+  var model = monacoEditor.getModel();
+  mMatches = [];
+  mIndex = -1;
+  mLastQuery = null;
+  if (!query) return { count: 0, index: -1 };
+  var searchStr = query;
+  var useRegex = !!isRegex;
+  if (wholeWord) {
+    searchStr = '\\b(?:' + (isRegex ? query : escapeRegExp(query)) + ')\\b';
+    useRegex = true;
+  }
+  try {
+    mMatches = model.findMatches(searchStr, false, useRegex, !!matchCase, null, true, 9999) || [];
+  } catch (e) {
+    return { count: 0, index: -1, error: String(e) };
+  }
+  mLastQuery = { query: query, matchCase: !!matchCase, isRegex: !!isRegex, wholeWord: !!wholeWord };
+  if (mMatches.length > 0) {
+    // 从光标之后第一个匹配开始
+    var pos = monacoEditor.getPosition();
+    var idx = 0;
+    if (pos) {
+      for (var i = 0; i < mMatches.length; i++) {
+        var r = mMatches[i].range;
+        if (r.startLineNumber > pos.lineNumber ||
+            (r.startLineNumber === pos.lineNumber && r.startColumn >= pos.column)) { idx = i; break; }
+        idx = i + 1;
+      }
+      if (idx >= mMatches.length) idx = 0;
+    }
+    monacoGotoMatch(idx);
+  }
+  return { count: mMatches.length, index: mIndex };
+}
+
+function monacoGotoMatch(idx) {
+  if (idx < 0 || idx >= mMatches.length) return;
+  mIndex = idx;
+  var range = mMatches[idx].range;
+  monacoEditor.setSelection(range);
+  monacoEditor.revealRangeInCenterIfOutsideViewport(range);
+  monacoEditor.focus();
+}
+
+function monacoReplacementText(replacement, match) {
+  // 正则模式下支持 $1..$9 捕获组引用
+  if (!mLastQuery || !mLastQuery.isRegex || !match || !match.matches) return replacement;
+  return replacement.replace(/\$(\$|\d)/g, function (_, g) {
+    if (g === '$') return '$';
+    var n = parseInt(g, 10);
+    return (match.matches && match.matches[n] != null) ? match.matches[n] : '';
+  });
+}
+
+/* ------------------------------------------------------------
+ * Fallback 模式（textarea + 行号 + 撤销栈 + 查找）
+ * ---------------------------------------------------------- */
+var fb = null;
+
+function initFallback(reason) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('container').style.display = 'none';
+  document.getElementById('fallback').classList.add('visible');
+
+  var ta = document.getElementById('ta');
+  var gutter = document.getElementById('gutter');
+
+  fb = {
+    ta: ta,
+    gutter: gutter,
+    undoStack: [],
+    redoStack: [],
+    matches: [],
+    matchIndex: -1,
+    lastQuery: null,
+    applyingHistory: false
+  };
+
+  function refreshGutter() {
+    var lines = ta.value.split('\n').length;
+    var nums = [];
+    for (var i = 1; i <= lines; i++) nums.push(i);
+    gutter.textContent = nums.join('\n');
+  }
+
+  ta.addEventListener('scroll', function () { gutter.scrollTop = ta.scrollTop; });
+
+  var pushTimer = null;
+  var notifyTimer = null;
+  ta.addEventListener('input', function () {
+    refreshGutter();
+    if (!fb.applyingHistory) {
+      if (pushTimer) clearTimeout(pushTimer);
+      pushTimer = setTimeout(pushUndo, 400);
+    }
+    if (notifyTimer) clearTimeout(notifyTimer);
+    notifyTimer = setTimeout(function () {
+      postToFlutter({ type: 'content', text: ta.value });
+      sendCursor();
+    }, 200);
+  });
+
+  function sendCursor() {
+    var upto = ta.value.substring(0, ta.selectionStart);
+    var line = upto.split('\n').length;
+    var col = ta.selectionStart - upto.lastIndexOf('\n');
+    var selected = Math.abs(ta.selectionEnd - ta.selectionStart);
+    postToFlutter({ type: 'cursor', line: line, column: col, selected: selected });
+  }
+  ta.addEventListener('click', sendCursor);
+  ta.addEventListener('keyup', sendCursor);
+  ta.addEventListener('select', sendCursor);
+
+  function pushUndo() {
+    fb.undoStack.push({ text: ta.value, start: ta.selectionStart, end: ta.selectionEnd });
+    if (fb.undoStack.length > 200) fb.undoStack.shift();
+    fb.redoStack = [];
+  }
+  fb.pushUndo = pushUndo;
+  refreshGutter();
+  postToFlutter({ type: 'ready', mode: 'fallback', reason: reason || '' });
+}
+
+function fbApplySnapshot(s) {
+  fb.applyingHistory = true;
+  fb.ta.value = s.text;
+  fb.ta.selectionStart = s.start;
+  fb.ta.selectionEnd = s.end;
+  fb.applyingHistory = false;
+  var evt;
+  try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+  fb.ta.dispatchEvent(evt);
+}
+
+function fbFind(query, matchCase, isRegex, wholeWord) {
+  fb.matches = [];
+  fb.matchIndex = -1;
+  fb.lastQuery = null;
+  if (!query) return { count: 0, index: -1 };
+  var pattern = isRegex ? query : escapeRegExp(query);
+  if (wholeWord) pattern = '\\b(?:' + pattern + ')\\b';
+  var flags = 'g' + (matchCase ? '' : 'i');
+  var re;
+  try { re = new RegExp(pattern, flags); } catch (e) { return { count: 0, index: -1, error: String(e) }; }
+  var m;
+  while ((m = re.exec(fb.ta.value)) !== null) {
+    fb.matches.push({ start: m.index, end: m.index + m[0].length, text: m[0], groups: m });
+    if (m[0].length === 0) re.lastIndex++;
+    if (fb.matches.length >= 9999) break;
+  }
+  fb.lastQuery = { query: query, matchCase: !!matchCase, isRegex: !!isRegex, wholeWord: !!wholeWord };
+  if (fb.matches.length > 0) {
+    var pos = fb.ta.selectionStart;
+    var idx = 0;
+    for (var i = 0; i < fb.matches.length; i++) {
+      if (fb.matches[i].start >= pos) { idx = i; break; }
+      idx = i + 1;
+    }
+    if (idx >= fb.matches.length) idx = 0;
+    fbGotoMatch(idx);
+  }
+  return { count: fb.matches.length, index: fb.matchIndex };
+}
+
+function fbGotoMatch(idx) {
+  if (idx < 0 || idx >= fb.matches.length) return;
+  fb.matchIndex = idx;
+  var m = fb.matches[idx];
+  fb.ta.focus();
+  fb.ta.setSelectionRange(m.start, m.end);
+  // 滚动到选区附近（按固定行高估算）
+  var lineHeight = 21;
+  var line = fb.ta.value.substring(0, m.start).split('\n').length;
+  var target = (line - 3) * lineHeight;
+  if (target < 0) target = 0;
+  fb.ta.scrollTop = target;
+  fb.gutter.scrollTop = target;
+}
+
+function fbReplacementText(replacement, match) {
+  if (!fb.lastQuery || !fb.lastQuery.isRegex || !match) return replacement;
+  return replacement.replace(/\$(\$|\d)/g, function (_, g) {
+    if (g === '$') return '$';
+    var n = parseInt(g, 10);
+    return (match.groups && match.groups[n] != null) ? match.groups[n] : '';
+  });
+}
+
+/* ------------------------------------------------------------
+ * 统一 API
+ * ---------------------------------------------------------- */
+window.editorApi = {
+
+  setContent: function (text, language) {
+    text = text == null ? '' : String(text);
+    if (monacoEditor) {
+      var model = monacoEditor.getModel();
+      monaco.editor.setModelLanguage(model, language || 'plaintext');
+      if (model.getValue() !== text) model.setValue(text);
+      mMatches = []; mIndex = -1;
+    } else if (fb) {
+      fb.ta.value = text;
+      try { fb.ta.setSelectionRange(0, 0); } catch (e) {}
+      fb.undoStack = []; fb.redoStack = [];
+      fb.matches = []; fb.matchIndex = -1;
+      var evt;
+      try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+      fb.ta.dispatchEvent(evt);
+    }
+  },
+
+  getContent: function () {
+    if (monacoEditor) return monacoEditor.getValue();
+    if (fb) return fb.ta.value;
+    return '';
+  },
+
+  setLanguage: function (language) {
+    if (monacoEditor) {
+      monaco.editor.setModelLanguage(monacoEditor.getModel(), language || 'plaintext');
+    }
+  },
+
+  setDarkMode: function (dark) {
+    document.body.classList.remove('dark', 'light');
+    document.body.classList.add(dark ? 'dark' : 'light');
+    if (monacoEditor) monaco.editor.setTheme(dark ? 'vs-dark' : 'vs');
+  },
+
+  undo: function () {
+    if (monacoEditor) { monacoEditor.trigger('flutter', 'undo', null); return; }
+    if (fb && fb.undoStack.length > 0) {
+      fb.redoStack.push({ text: fb.ta.value, start: fb.ta.selectionStart, end: fb.ta.selectionEnd });
+      fbApplySnapshot(fb.undoStack.pop());
+    }
+  },
+
+  redo: function () {
+    if (monacoEditor) { monacoEditor.trigger('flutter', 'redo', null); return; }
+    if (fb && fb.redoStack.length > 0) {
+      fb.undoStack.push({ text: fb.ta.value, start: fb.ta.selectionStart, end: fb.ta.selectionEnd });
+      fbApplySnapshot(fb.redoStack.pop());
+    }
+  },
+
+  find: function (query, matchCase, isRegex, wholeWord) {
+    if (monacoEditor) return JSON.stringify(monacoFind(query, matchCase, isRegex, wholeWord));
+    if (fb) return JSON.stringify(fbFind(query, matchCase, isRegex, wholeWord));
+    return JSON.stringify({ count: 0, index: -1 });
+  },
+
+  findNext: function () {
+    if (monacoEditor) {
+      if (mMatches.length === 0) return -1;
+      monacoGotoMatch((mIndex + 1) % mMatches.length);
+      return mIndex;
+    }
+    if (fb) {
+      if (fb.matches.length === 0) return -1;
+      fbGotoMatch((fb.matchIndex + 1) % fb.matches.length);
+      return fb.matchIndex;
+    }
+    return -1;
+  },
+
+  findPrev: function () {
+    if (monacoEditor) {
+      if (mMatches.length === 0) return -1;
+      monacoGotoMatch((mIndex - 1 + mMatches.length) % mMatches.length);
+      return mIndex;
+    }
+    if (fb) {
+      if (fb.matches.length === 0) return -1;
+      fbGotoMatch((fb.matchIndex - 1 + fb.matches.length) % fb.matches.length);
+      return fb.matchIndex;
+    }
+    return -1;
+  },
+
+  replaceCurrent: function (replacement) {
+    if (monacoEditor) {
+      if (mIndex < 0 || mIndex >= mMatches.length) return JSON.stringify({ replaced: false, count: mMatches.length, index: mIndex });
+      var match = mMatches[mIndex];
+      var text = monacoReplacementText(replacement, match);
+      monacoEditor.executeEdits('flutter-replace', [{ range: match.range, text: text }]);
+      // 重新执行查找以刷新匹配列表
+      var q = mLastQuery;
+      var result = monacoFind(q.query, q.matchCase, q.isRegex, q.wholeWord);
+      return JSON.stringify({ replaced: true, count: result.count, index: result.index });
+    }
+    if (fb) {
+      if (fb.matchIndex < 0 || fb.matchIndex >= fb.matches.length) {
+        return JSON.stringify({ replaced: false, count: fb.matches.length, index: fb.matchIndex });
+      }
+      fb.pushUndo();
+      var m = fb.matches[fb.matchIndex];
+      var text = fbReplacementText(replacement, m);
+      fb.ta.setRangeText(text, m.start, m.end, 'end');
+      var evt;
+      try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+      fb.ta.dispatchEvent(evt);
+      var q = fb.lastQuery;
+      var result = fbFind(q.query, q.matchCase, q.isRegex, q.wholeWord);
+      return JSON.stringify({ replaced: true, count: result.count, index: result.index });
+    }
+    return JSON.stringify({ replaced: false, count: 0, index: -1 });
+  },
+
+  replaceAll: function (replacement) {
+    if (monacoEditor) {
+      if (mMatches.length === 0) return 0;
+      var edits = [];
+      for (var i = 0; i < mMatches.length; i++) {
+        edits.push({ range: mMatches[i].range, text: monacoReplacementText(replacement, mMatches[i]) });
+      }
+      monacoEditor.executeEdits('flutter-replace-all', edits);
+      var n = mMatches.length;
+      mMatches = []; mIndex = -1;
+      return n;
+    }
+    if (fb) {
+      if (fb.matches.length === 0) return 0;
+      fb.pushUndo();
+      var text = fb.ta.value;
+      var delta = 0;
+      for (var i = 0; i < fb.matches.length; i++) {
+        var m = fb.matches[i];
+        var rep = fbReplacementText(replacement, m);
+        text = text.substring(0, m.start + delta) + rep + text.substring(m.end + delta);
+        delta += rep.length - (m.end - m.start);
+      }
+      fb.ta.value = text;
+      var evt;
+      try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+      fb.ta.dispatchEvent(evt);
+      var n = fb.matches.length;
+      fb.matches = []; fb.matchIndex = -1;
+      return n;
+    }
+    return 0;
+  },
+
+  closeFind: function () {
+    mMatches = []; mIndex = -1;
+    if (fb) { fb.matches = []; fb.matchIndex = -1; }
+  },
+
+  gotoLine: function (line) {
+    line = parseInt(line, 10) || 1;
+    if (monacoEditor) {
+      var model = monacoEditor.getModel();
+      var max = model.getLineCount();
+      if (line < 1) line = 1;
+      if (line > max) line = max;
+      monacoEditor.setPosition({ lineNumber: line, column: 1 });
+      monacoEditor.revealLineInCenterIfOutsideViewport(line);
+      monacoEditor.focus();
+    } else if (fb) {
+      var lines = fb.ta.value.split('\n');
+      if (line < 1) line = 1;
+      if (line > lines.length) line = lines.length;
+      var pos = 0;
+      for (var i = 0; i < line - 1; i++) pos += lines[i].length + 1;
+      fb.ta.focus();
+      fb.ta.setSelectionRange(pos, pos);
+      var target = (line - 3) * 21;
+      if (target < 0) target = 0;
+      fb.ta.scrollTop = target;
+      fb.gutter.scrollTop = target;
+    }
+  },
+
+  insertText: function (text) {
+    if (monacoEditor) {
+      var sel = monacoEditor.getSelection();
+      monacoEditor.executeEdits('flutter-insert', [{ range: sel, text: String(text) }]);
+      monacoEditor.focus();
+    } else if (fb) {
+      fb.pushUndo();
+      fb.ta.setRangeText(String(text), fb.ta.selectionStart, fb.ta.selectionEnd, 'end');
+      var evt;
+      try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+      fb.ta.dispatchEvent(evt);
+    }
+  },
+
+  getStats: function () {
+    var text = window.editorApi.getContent();
+    var lines = text === '' ? 1 : text.split('\n').length;
+    var line = 1, column = 1, selected = 0;
+    if (monacoEditor) {
+      var pos = monacoEditor.getPosition();
+      var sel = monacoEditor.getSelection();
+      var model = monacoEditor.getModel();
+      line = pos ? pos.lineNumber : 1;
+      column = pos ? pos.column : 1;
+      selected = sel ? model.getValueLengthInRange(sel) : 0;
+    } else if (fb) {
+      var upto = fb.ta.value.substring(0, fb.ta.selectionStart);
+      line = upto.split('\n').length;
+      column = fb.ta.selectionStart - upto.lastIndexOf('\n');
+      selected = Math.abs(fb.ta.selectionEnd - fb.ta.selectionStart);
+    }
+    return JSON.stringify({ line: line, column: column, chars: text.length, lines: lines, selected: selected });
+  },
+
+  setFontSize: function (size) {
+    size = parseInt(size, 10) || 14;
+    if (monacoEditor) monacoEditor.updateOptions({ fontSize: size });
+    if (fb) { fb.ta.style.fontSize = size + 'px'; fb.gutter.style.fontSize = size + 'px'; }
+  }
+};
+
+/* ------------------------------------------------------------
+ * 启动：加载 Monaco，失败则降级
+ * ---------------------------------------------------------- */
+function bootstrap() {
+  if (FORCE_FALLBACK) { initFallback('forced'); return; }
+  var CDN_LIST = [
+    'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs',
+    'https://unpkg.com/monaco-editor@0.52.2/min/vs'
+  ];
+  var cdnIdx = 0;
+  var settled = false;
+  var timer = null;
+
+  function armTimer() {
+    if (timer) clearTimeout(timer);
+    // 自检模式下放宽超时，便于慢网络验证
+    timer = setTimeout(function () { onFail('timeout'); }, SELFTEST ? 120000 : 20000);
+  }
+
+  function onFail(reason) {
+    if (settled) return;
+    if (cdnIdx + 1 < CDN_LIST.length) {
+      cdnIdx++;
+      loadFrom(cdnIdx);
+    } else {
+      settled = true;
+      if (timer) clearTimeout(timer);
+      initFallback(reason);
+    }
+  }
+
+  function loadFrom(idx) {
+    armTimer();
+    var script = document.createElement('script');
+    script.src = CDN_LIST[idx] + '/loader.js';
+    script.onerror = function () { onFail('cdn-error'); };
+    script.onload = function () {
+      try {
+        require.config({ paths: { vs: CDN_LIST[idx] } });
+        require(['vs/editor/editor.main'], function () {
+          if (!settled) {
+            settled = true;
+            if (timer) clearTimeout(timer);
+            initMonaco();
+          }
+        }, function (err) { onFail('amd-error'); });
+      } catch (e) { onFail('exception'); }
+    };
+    document.head.appendChild(script);
+  }
+
+  loadFrom(0);
+}
+bootstrap();
+
+/* ------------------------------------------------------------
+ * 自检模式 (?selftest=1)：结果渲染到 #test-results
+ * ---------------------------------------------------------- */
+function selftest() {
+  var out = [];
+  var pass = 0, fail = 0;
+  function check(name, cond) {
+    if (cond) { pass++; out.push('PASS ' + name); }
+    else { fail++; out.push('FAIL ' + name); }
+  }
+  var sample = 'function hello(name) {\n  const msg = "Hello, " + name;\n  console.log(msg);\n  return msg;\n}\nhello("World");\nhello("Monaco");\n';
+
+  var waitReady = setInterval(function () {
+    if (!monacoEditor && !fb) return;
+    clearInterval(waitReady);
+    try {
+      var api = window.editorApi;
+      api.setContent(sample, 'javascript');
+      check('setContent/getContent', api.getContent() === sample);
+
+      var stats = JSON.parse(api.getStats());
+      check('stats lines=8', stats.lines === 8);
+      check('stats chars', stats.chars === sample.length);
+
+      var f = JSON.parse(api.find('hello', false, false, false));
+      check('find hello x4 (ignore case)', f.count === 4);
+      f = JSON.parse(api.find('hello', true, false, false));
+      check('find hello x3 (match case)', f.count === 3);
+      f = JSON.parse(api.find('h.llo', true, true, false));
+      check('find regex h.llo x3', f.count === 3);
+
+      api.gotoLine(1);
+      api.find('hello', true, false, false);
+      var r = JSON.parse(api.replaceCurrent('hi'));
+      check('replaceCurrent', r.replaced === true && api.getContent().indexOf('function hi(name)') !== -1);
+
+      api.find('hello', true, false, false);
+      var n = api.replaceAll('hey');
+      check('replaceAll x2', n === 2 && api.getContent().indexOf('hey("Monaco")') !== -1);
+
+      api.undo(); // 撤销 replaceAll
+      check('undo restores hello', api.getContent().indexOf('hello("Monaco")') !== -1);
+      api.redo();
+      check('redo restores hey', api.getContent().indexOf('hey("Monaco")') !== -1);
+
+      api.setContent(sample, 'javascript');
+      api.gotoLine(3);
+      stats = JSON.parse(api.getStats());
+      check('gotoLine 3', stats.line === 3);
+
+      api.insertText('// inserted\n');
+      check('insertText', api.getContent().indexOf('// inserted') !== -1);
+
+      api.setDarkMode(false);
+      check('setDarkMode light', document.body.classList.contains('light'));
+      api.setDarkMode(true);
+      check('setDarkMode dark', document.body.classList.contains('dark'));
+
+      // 查找导航
+      api.setContent(sample, 'javascript');
+      api.gotoLine(1);
+      api.find('msg', true, false, false);
+      var i1 = JSON.parse(api.find('msg', true, false, false)).index;
+      var i2 = api.findNext();
+      check('findNext moves', i2 !== i1);
+      var i3 = api.findPrev();
+      check('findPrev moves back', i3 === i1);
+    } catch (e) {
+      fail++;
+      out.push('EXCEPTION ' + (e && e.stack ? e.stack : e));
+    }
+    var el = document.getElementById('test-results');
+    el.style.display = 'block';
+    el.textContent = 'MODE=' + (monacoEditor ? 'monaco' : 'fallback') + '  PASS=' + pass + ' FAIL=' + fail + '\n' + out.join('\n');
+    document.title = 'PASS=' + pass + ' FAIL=' + fail;
+  }, 300);
+}
+if (SELFTEST) selftest();
+</script>
+</body>
+</html>

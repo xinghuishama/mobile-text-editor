@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/file_model.dart';
@@ -11,6 +9,7 @@ class AppState extends ChangeNotifier {
   String? activeFileId;
   ThemeMode themeMode = ThemeMode.dark;
   String defaultEncoding = 'UTF-8';
+  int fontSize = 14;
 
   AppState() {
     _loadSettings();
@@ -22,6 +21,7 @@ class AppState extends ChangeNotifier {
     final theme = prefs.getString('themeMode') ?? 'dark';
     themeMode = theme == 'dark' ? ThemeMode.dark : ThemeMode.light;
     defaultEncoding = prefs.getString('defaultEncoding') ?? 'UTF-8';
+    fontSize = prefs.getInt('fontSize') ?? 14;
     notifyListeners();
   }
 
@@ -39,6 +39,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFontSize(int size) async {
+    fontSize = size;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('fontSize', size);
+    notifyListeners();
+  }
+
+  /// 设置当前活动标签（原实现直接赋值字段不触发通知，导致编辑器不切换内容）
+  void setActiveFile(String fileId) {
+    if (activeFileId == fileId) return;
+    if (!openedFiles.any((f) => f.id == fileId)) return;
+    activeFileId = fileId;
+    notifyListeners();
+  }
+
   Future<void> _loadSavedFiles() async {
     final files = await FileUtils.loadFileList();
     savedFiles = files;
@@ -49,12 +64,8 @@ class AppState extends ChangeNotifier {
     await _loadSavedFiles();
   }
 
-  Future<FileModel> createNewFile({String? content, String? fileName}) async {
-    final file = await FileUtils.createNewFile(
-      content: content ?? '',
-      encoding: defaultEncoding,
-    );
-    // 添加到列表
+  Future<FileModel> createNewFile({String? content}) async {
+    final file = await FileUtils.createNewFile(content: content ?? '', encoding: defaultEncoding);
     savedFiles.add(file);
     await _saveFileList();
     notifyListeners();
@@ -62,7 +73,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<FileModel?> openExternalFile() async {
-    final file = await FileUtils.openExternalFile();
+    final file = await FileUtils.openExternalFile(fallbackEncoding: defaultEncoding);
     if (file != null) {
       savedFiles.add(file);
       await _saveFileList();
@@ -73,25 +84,16 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> openFile(FileModel file) async {
-    // 如果文件已打开，切换到该标签
     if (openedFiles.any((f) => f.id == file.id)) {
       activeFileId = file.id;
       notifyListeners();
       return;
     }
-    // 检查上限
     if (openedFiles.length >= 5) {
       throw Exception('已达最大打开文件数 (5个)');
     }
-    // 读取文件内容
-    String content = file.content;
-    if (content.isEmpty) {
-      try {
-        content = await FileUtils.readFile(file.path);
-      } catch (_) {
-        content = '';
-      }
-    }
+    // 按文件记录的编码读取
+    final content = await FileUtils.readFile(file.path, file.encoding);
     final updatedFile = file.copyWith(content: content, isDirty: false);
     openedFiles.add(updatedFile);
     activeFileId = updatedFile.id;
@@ -105,7 +107,6 @@ class AppState extends ChangeNotifier {
     if (file.isDirty && !force) {
       throw Exception('文件未保存');
     }
-    // 如果是新建文件且未保存，从 savedFiles 移除
     if (file.isNewFile && !file.isDirty) {
       savedFiles.removeWhere((f) => f.id == fileId);
       await _saveFileList();
@@ -122,31 +123,26 @@ class AppState extends ChangeNotifier {
     final enc = encoding ?? file.encoding;
     await FileUtils.saveFile(file, enc);
     final index = openedFiles.indexWhere((f) => f.id == fileId);
-    final savedFile = file.copyWith(isDirty: false, encoding: enc);
-    openedFiles[index] = savedFile;
-    
-    // 更新 savedFiles 中的对应条目
+    openedFiles[index] = file.copyWith(isDirty: false, encoding: enc);
     final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
     if (savedIndex != -1) {
-      savedFiles[savedIndex] = savedFile;
-    } else {
-      // 如果是新建文件，添加到 savedFiles
-      savedFiles.add(savedFile);
+      savedFiles[savedIndex] = openedFiles[index];
     }
     await _saveFileList();
     notifyListeners();
   }
 
-  Future<void> saveAsFile(String fileId, {String? encoding}) async {
+  Future<bool> saveAsFile(String fileId, {String? encoding}) async {
     final file = openedFiles.firstWhere((f) => f.id == fileId);
-    final newPath = await FileUtils.saveAsFile(file, encoding: encoding);
+    final enc = encoding ?? file.encoding;
+    final newPath = await FileUtils.saveAsFile(file, encoding: enc);
     if (newPath != null) {
       final newFile = file.copyWith(
         path: newPath,
         name: newPath.split('/').last,
         isNewFile: false,
         isDirty: false,
-        encoding: encoding ?? file.encoding,
+        encoding: enc,
       );
       final index = openedFiles.indexWhere((f) => f.id == fileId);
       openedFiles[index] = newFile;
@@ -158,22 +154,42 @@ class AppState extends ChangeNotifier {
       }
       await _saveFileList();
       notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  /// 编辑器内容变化回调。
+  /// 注意：编辑器初始化/切换文件时 JS 会回发相同内容，相同内容直接忽略，
+  /// 避免把刚打开的文件误标为脏；仅在脏标记变化时通知，避免每次击键重建 UI。
+  void updateContent(String fileId, String content) {
+    final index = openedFiles.indexWhere((f) => f.id == fileId);
+    if (index == -1) return;
+    if (openedFiles[index].content == content) return;
+    final wasDirty = openedFiles[index].isDirty;
+    openedFiles[index] = openedFiles[index].copyWith(
+      content: content,
+      isDirty: true,
+    );
+    final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
+    if (savedIndex != -1) {
+      savedFiles[savedIndex] = openedFiles[index];
+    }
+    if (!wasDirty) {
+      notifyListeners();
     }
   }
 
-  void updateContent(String fileId, String content) {
+  /// 修改文件保存编码（下次保存生效）
+  void setFileEncoding(String fileId, String encoding) {
     final index = openedFiles.indexWhere((f) => f.id == fileId);
-    if (index != -1) {
-      openedFiles[index] = openedFiles[index].copyWith(
-        content: content,
-        isDirty: true,
-      );
-      final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
-      if (savedIndex != -1) {
-        savedFiles[savedIndex] = openedFiles[index];
-      }
-      notifyListeners();
+    if (index == -1) return;
+    openedFiles[index] = openedFiles[index].copyWith(encoding: encoding);
+    final savedIndex = savedFiles.indexWhere((f) => f.id == fileId);
+    if (savedIndex != -1) {
+      savedFiles[savedIndex] = openedFiles[index];
     }
+    notifyListeners();
   }
 
   FileModel? get activeFile {

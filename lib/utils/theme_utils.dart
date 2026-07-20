@@ -2,28 +2,28 @@ import 'package:flutter/material.dart';
 
 class ThemeUtils {
   static ThemeData get lightTheme => ThemeData(
-    brightness: Brightness.light,
-    primaryColor: Colors.blue,
-    scaffoldBackgroundColor: Colors.white,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.blue,
-      foregroundColor: Colors.white,
-    ),
-    cardTheme: const CardTheme(
-      color: Colors.white,
-    ),
-  );
+        brightness: Brightness.light,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+        ),
+      );
 
   static ThemeData get darkTheme => ThemeData(
-    brightness: Brightness.dark,
-    primaryColor: Colors.grey[900],
-    scaffoldBackgroundColor: Colors.grey[900],
-    appBarTheme: AppBarTheme(
-      backgroundColor: Colors.grey[850],
-      foregroundColor: Colors.white,
-    ),
-    cardTheme: CardTheme(
-      color: Colors.grey[850],
-    ),
-  );
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF212121),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF303030),
+          foregroundColor: Colors.white,
+        ),
+      );
 }

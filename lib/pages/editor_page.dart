@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../widgets/editor_webview.dart';
+import '../widgets/find_replace_bar.dart';
+
+class _CursorInfo {
+  final int line;
+  final int column;
+  final int selected;
+  const _CursorInfo({this.line = 1, this.column = 1, this.selected = 0});
+}
 
 class EditorPage extends StatefulWidget {
   const EditorPage({Key? key}) : super(key: key);
@@ -10,246 +18,384 @@ class EditorPage extends StatefulWidget {
   _EditorPageState createState() => _EditorPageState();
 }
 
-class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
-  TabController? _tabController;
+class _EditorPageState extends State<EditorPage> {
+  final GlobalKey<EditorWebViewState> _editorKey = GlobalKey<EditorWebViewState>();
+  final ValueNotifier<_CursorInfo> _cursor =
+      ValueNotifier(const _CursorInfo());
+  final ValueNotifier<int> _charCount = ValueNotifier(0);
+  bool _findBarVisible = false;
+  String _editorMode = '';
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateTabs();
-    });
+  void dispose() {
+    _cursor.dispose();
+    _charCount.dispose();
+    super.dispose();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _updateTabs();
+  /// 从 JS 侧拉取最新内容并同步到 AppState。
+  /// 保存、切换标签、关闭标签、返回上一页前必须调用，
+  /// 否则 JS 防抖窗口内的最后几个字符会丢失。
+  Future<void> _syncCurrentContent() async {
+    final appState = context.read<AppState>();
+    final file = appState.activeFile;
+    final state = _editorKey.currentState;
+    if (file == null || state == null || !state.isReady) return;
+    final content = await state.getContent();
+    if (content != file.content) {
+      appState.updateContent(file.id, content);
+    }
   }
 
-  void _updateTabs() {
-    final appState = Provider.of<AppState>(context, listen: false);
-    final count = appState.openedFiles.length;
-    
-    // 如果 _tabController 已存在且长度相同，不做任何事
-    if (_tabController != null && _tabController!.length == count) {
-      final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
-      if (activeIndex != -1 && _tabController!.index != activeIndex) {
-        _tabController!.animateTo(activeIndex);
-      }
-      return;
+  Future<void> _save() async {
+    final appState = context.read<AppState>();
+    final file = appState.activeFile;
+    if (file == null) return;
+    await _syncCurrentContent();
+    try {
+      await appState.saveFile(file.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存成功'), duration: Duration(seconds: 1)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存失败: $e')),
+      );
     }
-
-    // 否则，dispose 旧的并创建新的
-    if (_tabController != null) {
-      _tabController!.dispose();
-    }
-    _tabController = TabController(length: count, vsync: this);
-    final activeIndex = appState.openedFiles.indexWhere((f) => f.id == appState.activeFileId);
-    if (activeIndex != -1) {
-      _tabController!.index = activeIndex;
-    }
-    setState(() {});
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('编辑器'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Consumer<AppState>(
-            builder: (context, appState, child) {
-              final opened = appState.openedFiles;
-              if (opened.isEmpty || _tabController == null) {
-                return const SizedBox.shrink();
-              }
-              return TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                labelColor: Theme.of(context).primaryColor,
-                unselectedLabelColor: Colors.grey,
-                indicator: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Theme.of(context).primaryColor,
-                      width: 2,
-                    ),
-                  ),
-                ),
-                tabs: opened.map((file) {
-                  return Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(file.name),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => _closeTab(context, file.id),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onTap: (index) {
-                  final file = opened[index];
-                  context.read<AppState>().activeFileId = file.id;
-                },
-              );
-            },
-          ),
+  Future<void> _saveAs() async {
+    final appState = context.read<AppState>();
+    final file = appState.activeFile;
+    if (file == null) return;
+    await _syncCurrentContent();
+    final ok = await appState.saveAsFile(file.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? '另存为成功' : '另存为已取消或失败'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _gotoLine() async {
+    final controller = TextEditingController();
+    final line = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('跳转到行'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: '输入行号'),
+          onSubmitted: (v) => Navigator.pop(ctx, int.tryParse(v)),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, int.tryParse(controller.text)),
+            child: const Text('跳转'),
+          ),
+        ],
       ),
-      body: Consumer<AppState>(
-        builder: (context, appState, child) {
-          final activeFile = appState.activeFile;
-          if (activeFile == null) {
-            return const Center(child: Text('没有打开的文件'));
-          }
-          final isDark = appState.themeMode == ThemeMode.dark;
-          return EditorWebView(
-            key: ValueKey(activeFile.id),
-            fileId: activeFile.id,
-            content: activeFile.content,
-            language: _getLanguageFromFileName(activeFile.name),
-            isDarkMode: isDark,
-            onContentChanged: (content) {
-              appState.updateContent(activeFile.id, content);
-            },
-          );
-        },
-      ),
-      bottomNavigationBar: Consumer<AppState>(
-        builder: (context, appState, child) {
-          final activeFile = appState.activeFile;
-          if (activeFile == null) return const SizedBox.shrink();
-          return Container(
-            color: Theme.of(context).cardColor,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                _buildIconButton(Icons.undo, '撤销', () {}),
-                _buildIconButton(Icons.redo, '重做', () {}),
-                _buildIconButton(Icons.search, '查找', () {}),
-                _buildIconButton(Icons.find_replace, '替换', () {}),
-                const VerticalDivider(),
-                _buildIconButton(Icons.save, '保存', () async {
-                  try {
-                    await appState.saveFile(activeFile.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('保存成功')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('保存失败: $e')),
-                    );
-                  }
-                }),
-                _buildIconButton(Icons.save_as, '另存为', () async {
-                  await appState.saveAsFile(activeFile.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('另存为成功')),
-                  );
-                }),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    appState.themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode,
-                  ),
-                  onPressed: () {
-                    final newMode = appState.themeMode == ThemeMode.dark
-                        ? ThemeMode.light
-                        : ThemeMode.dark;
-                    appState.setThemeMode(newMode);
+    );
+    if (line != null && line > 0) {
+      _editorKey.currentState?.gotoLine(line);
+    }
+  }
+
+  void _changeEncoding() {
+    final appState = context.read<AppState>();
+    final file = appState.activeFile;
+    if (file == null) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('保存编码', style: TextStyle(fontWeight: FontWeight.bold))),
+              for (final enc in const ['UTF-8', 'GBK', 'Big5'])
+                RadioListTile<String>(
+                  title: Text(enc),
+                  value: enc,
+                  groupValue: file.encoding,
+                  onChanged: (v) {
+                    if (v != null) appState.setFileEncoding(file.id, v);
+                    Navigator.pop(ctx);
                   },
                 ),
-              ],
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final appState = context.read<AppState>();
-          final file = await appState.createNewFile();
-          await appState.openFile(file);
-          _updateTabs();
-          // 不导航，留在编辑器页
-        },
-        child: const Icon(Icons.add),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildIconButton(IconData icon, String tooltip, VoidCallback onPressed) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton(
-        icon: Icon(icon),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 40),
-        onPressed: onPressed,
-      ),
-    );
-  }
-
-  void _closeTab(BuildContext context, String fileId) async {
+  Future<void> _closeTab(String fileId) async {
     final appState = context.read<AppState>();
+    // 关闭的是当前标签时先同步内容，确保 dirty 判断基于最新内容
+    if (appState.activeFileId == fileId) {
+      await _syncCurrentContent();
+    }
     try {
       await appState.closeFile(fileId);
-      _updateTabs();
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       final file = appState.openedFiles.firstWhere((f) => f.id == fileId);
-      final result = await showDialog<bool>(
+      final result = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('未保存'),
-          content: Text('文件 "${file.name}" 有未保存的更改，是否保存？'),
+          title: const Text('未保存的更改'),
+          content: Text('文件 "${file.name}" 有未保存的更改。'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('不保存'),
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('取消'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () => Navigator.pop(ctx, 'discard'),
+              child: const Text('不保存', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'save'),
               child: const Text('保存'),
             ),
           ],
         ),
       );
-      if (result == true) {
+      if (result == 'save') {
         await appState.saveFile(fileId);
         await appState.closeFile(fileId, force: true);
-        _updateTabs();
-      } else {
+      } else if (result == 'discard') {
         await appState.closeFile(fileId, force: true);
-        _updateTabs();
       }
     }
   }
 
-  String _getLanguageFromFileName(String fileName) {
-    final ext = fileName.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'js': return 'javascript';
-      case 'py': return 'python';
-      case 'html': return 'html';
-      case 'css': return 'css';
-      case 'json': return 'json';
-      case 'xml': return 'xml';
-      default: return 'plaintext';
-    }
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final activeFile = appState.activeFile;
+    final isDark = appState.themeMode == ThemeMode.dark;
+
+    return WillPopScope(
+      onWillPop: () async {
+        await _syncCurrentContent();
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(activeFile == null
+              ? '编辑器'
+              : '${activeFile.name}${activeFile.isDirty ? ' ●' : ''}'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(40),
+            child: _buildTabBar(appState),
+          ),
+        ),
+        body: activeFile == null
+            ? const Center(child: Text('没有打开的文件'))
+            : EditorWebView(
+                key: _editorKey,
+                fileId: activeFile.id,
+                content: activeFile.content,
+                language: _getLanguageFromFileName(activeFile.name),
+                isDarkMode: isDark,
+                fontSize: appState.fontSize,
+                onContentChanged: (content) {
+                  final id = context.read<AppState>().activeFileId;
+                  if (id != null) {
+                    context.read<AppState>().updateContent(id, content);
+                  }
+                  _charCount.value = content.length;
+                },
+                onCursorChanged: (line, column, selected) {
+                  _cursor.value =
+                      _CursorInfo(line: line, column: column, selected: selected);
+                },
+                onEditorReady: (mode) {
+                  if (mounted) setState(() => _editorMode = mode);
+                  final f = context.read<AppState>().activeFile;
+                  if (f != null) _charCount.value = f.content.length;
+                },
+              ),
+        bottomNavigationBar: activeFile == null
+            ? null
+            : SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_findBarVisible)
+                      FindReplaceBar(
+                        editorKey: _editorKey,
+                        onClose: () => setState(() => _findBarVisible = false),
+                      ),
+                    _buildStatusBar(appState, activeFile.encoding,
+                        _getLanguageFromFileName(activeFile.name)),
+                    _buildToolbar(appState),
+                  ],
+                ),
+              ),
+      ),
+    );
   }
 
-  @override
-  void dispose() {
-    if (_tabController != null) {
-      _tabController!.dispose();
-    }
-    super.dispose();
+  Widget _buildTabBar(AppState appState) {
+    final opened = appState.openedFiles;
+    if (opened.isEmpty) return const SizedBox.shrink();
+    final activeIndex =
+        opened.indexWhere((f) => f.id == appState.activeFileId);
+    return DefaultTabController(
+      key: ValueKey(opened.length),
+      length: opened.length,
+      initialIndex: activeIndex < 0 ? 0 : activeIndex,
+      child: TabBar(
+        isScrollable: true,
+        labelColor: Theme.of(context).colorScheme.primary,
+        unselectedLabelColor: Colors.grey,
+        indicatorColor: Theme.of(context).colorScheme.primary,
+        onTap: (index) async {
+          final target = opened[index];
+          if (target.id == appState.activeFileId) return;
+          await _syncCurrentContent();
+          if (mounted) context.read<AppState>().setActiveFile(target.id);
+        },
+        tabs: [
+          for (final file in opened)
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${file.name}${file.isDirty ? ' ●' : ''}'),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => _closeTab(file.id),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar(AppState appState, String encoding, String language) {
+    return Container(
+      width: double.infinity,
+      color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: ValueListenableBuilder<_CursorInfo>(
+        valueListenable: _cursor,
+        builder: (context, cursor, _) {
+          return ValueListenableBuilder<int>(
+            valueListenable: _charCount,
+            builder: (context, chars, _) {
+              final sel =
+                  cursor.selected > 0 ? ' | 选中 ${cursor.selected}' : '';
+              final mode = _editorMode == 'monaco' ? 'Monaco' : '基础';
+              return Text(
+                '行 ${cursor.line}, 列 ${cursor.column}$sel | $chars 字符 | $encoding | $language | $mode',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildToolbar(AppState appState) {
+    return Container(
+      color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        children: [
+          _toolBtn(Icons.undo, '撤销', () => _editorKey.currentState?.undo()),
+          _toolBtn(Icons.redo, '重做', () => _editorKey.currentState?.redo()),
+          _toolBtn(Icons.search, '查找替换', () {
+            setState(() => _findBarVisible = !_findBarVisible);
+          }),
+          _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),
+          _toolBtn(Icons.save, '保存', _save),
+          _toolBtn(Icons.save_as, '另存为', _saveAs),
+          _toolBtn(Icons.translate, '保存编码', _changeEncoding),
+          const Spacer(),
+          IconButton(
+            icon: Icon(appState.themeMode == ThemeMode.dark
+                ? Icons.light_mode
+                : Icons.dark_mode),
+            tooltip: '切换主题',
+            onPressed: () {
+              appState.setThemeMode(appState.themeMode == ThemeMode.dark
+                  ? ThemeMode.light
+                  : ThemeMode.dark);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _toolBtn(IconData icon, String tooltip, VoidCallback onPressed) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        icon: Icon(icon, size: 22),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  static const Map<String, String> _extLangMap = {
+    'js': 'javascript', 'mjs': 'javascript', 'jsx': 'javascript',
+    'ts': 'typescript', 'tsx': 'typescript',
+    'py': 'python',
+    'html': 'html', 'htm': 'html', 'vue': 'html',
+    'css': 'css', 'scss': 'scss', 'less': 'less',
+    'json': 'json',
+    'xml': 'xml', 'svg': 'xml',
+    'md': 'markdown',
+    'java': 'java',
+    'c': 'c', 'h': 'c',
+    'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
+    'cs': 'csharp',
+    'go': 'go',
+    'rs': 'rust',
+    'php': 'php',
+    'rb': 'ruby',
+    'sql': 'sql',
+    'yml': 'yaml', 'yaml': 'yaml',
+    'sh': 'shell', 'bash': 'shell',
+    'kt': 'kotlin', 'kts': 'kotlin',
+    'swift': 'swift',
+    'dart': 'dart',
+    'lua': 'lua',
+    'pl': 'perl',
+    'r': 'r',
+    'ini': 'ini', 'toml': 'ini', 'conf': 'ini',
+    'dockerfile': 'dockerfile',
+  };
+
+  String _getLanguageFromFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower == 'dockerfile') return 'dockerfile';
+    final ext = lower.contains('.') ? lower.split('.').last : '';
+    return _extLangMap[ext] ?? 'plaintext';
   }
 }

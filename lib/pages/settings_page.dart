@@ -30,6 +30,7 @@ class SettingsPage extends StatelessWidget {
               ),
               ListTile(
                 title: const Text('默认编码'),
+                subtitle: const Text('新建文件及无法识别编码时的回退编码'),
                 trailing: DropdownButton<String>(
                   value: appState.defaultEncoding,
                   onChanged: (enc) {
@@ -42,10 +43,22 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
               ),
+              ListTile(
+                title: const Text('编辑器字号'),
+                subtitle: Slider(
+                  value: appState.fontSize.toDouble(),
+                  min: 10,
+                  max: 24,
+                  divisions: 14,
+                  label: '${appState.fontSize}',
+                  onChanged: (v) => appState.setFontSize(v.round()),
+                ),
+                trailing: Text('${appState.fontSize}'),
+              ),
               const Divider(),
               const ListTile(
                 title: Text('关于'),
-                subtitle: Text('移动端文本编辑器 v1.0.0'),
+                subtitle: Text('移动端文本编辑器 v1.1.0\n基于 Flutter + Monaco Editor'),
               ),
             ],
           );

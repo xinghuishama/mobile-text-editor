@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_state.dart';
 import 'pages/file_list_page.dart';
@@ -26,20 +27,21 @@ class MyApp extends StatelessWidget {
                 : ThemeUtils.darkTheme,
             darkTheme: ThemeUtils.darkTheme,
             themeMode: appState.themeMode,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('zh', 'CN'),
+              Locale('en'),
+            ],
+            locale: const Locale('zh', 'CN'),
             initialRoute: '/',
             routes: {
               '/': (ctx) => const FileListPage(),
               '/editor': (ctx) => const EditorPage(),
               '/settings': (ctx) => const SettingsPage(),
-            },
-            // 处理未注册的路由（备选）
-            onGenerateRoute: (settings) {
-              if (settings.name == '/editor') {
-                return MaterialPageRoute(
-                  builder: (ctx) => const EditorPage(),
-                );
-              }
-              return null;
             },
           );
         },
