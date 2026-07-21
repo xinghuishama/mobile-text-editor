@@ -20,6 +20,7 @@ jobs:
         run: |
           mkdir -p /tmp/backup
           cp -r lib assets pubspec.yaml /tmp/backup/
+          cp -r tools /tmp/backup/ 2>/dev/null || true
           # 备份自定义应用图标（CI 重建工程后恢复，防止被默认图标覆盖）
           mkdir -p /tmp/backup/android_res
           cp -r android/app/src/main/res/* /tmp/backup/android_res/ 2>/dev/null || true
@@ -38,6 +39,7 @@ jobs:
           cp -r /tmp/backup/lib .
           cp -r /tmp/backup/assets .
           cp /tmp/backup/pubspec.yaml .
+          cp -r /tmp/backup/tools . 2>/dev/null || true
           # 恢复自定义应用图标
           mkdir -p android/app/src/main/res
           cp -r /tmp/backup/android_res/* android/app/src/main/res/ 2>/dev/null || true
