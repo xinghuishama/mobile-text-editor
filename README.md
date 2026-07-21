@@ -14,7 +14,8 @@
 - 🔤 编码支持：UTF-8 / GBK / Big5（打开时自动检测，保存时可指定编码）
 - 📊 状态栏：实时显示行列号、选中字数、总字符数、编码、语言、编辑器模式
 - ⌨️ 标点符号快捷条（Acode 风格）：默认折叠，点底部工具栏右侧箭头展开/收起，点击符号插入光标处
-- ⇥ 缩进按钮：缩进当前行或选中行（Monaco 用编辑器内置缩进，降级模式按行首插入 Tab）
+- ⇥ 缩进/减少缩进按钮：作用于当前行或选中行（Monaco 用编辑器内置动作，降级模式按行首增删 Tab）
+- 📥 「打开方式」支持：在文件管理器里选择 txt/md/html 等文本文件时，可直接用本应用打开（Android）
 - 🔠 编辑器字号可调（设置页）
 - 📴 离线降级：Monaco 加载失败（无网络）时自动切换内置基础编辑器，查找替换/撤销重做等功能全部可用
 
@@ -60,10 +61,14 @@ lib/
 │   ├── editor_webview.dart    # WebView 编辑器封装与 JS 桥接
 │   ├── find_replace_bar.dart  # 查找替换面板
 │   └── symbol_bar.dart        # 标点符号快捷条
+├── services/
+│   └── open_intent_service.dart # 「打开方式」intent 监听
 └── utils/
     ├── file_utils.dart        # 文件读写、编码转换、自动检测
     └── theme_utils.dart       # 主题定义
 assets/editor/index.html       # 编辑器页面（Monaco + 离线降级）
+tools/patch_android.py         # Android 工程补丁（注册打开方式），CI 自动执行
+tools/android/MainActivity.kt  # 处理 VIEW intent 的原生代码模板
 ```
 
 ## 构建与运行
@@ -75,6 +80,15 @@ flutter run
 注意事项：
 - Monaco Editor 通过 CDN 加载，**Android release 构建需确保** `android/app/src/main/AndroidManifest.xml` 中有 `<uses-permission android:name="android.permission.INTERNET"/>`（`flutter create` 模板默认已包含）。无网络时会自动降级为基础编辑器，功能不受影响（无语法高亮）。
 - 编码转换（GBK/Big5）依赖平台原生能力（charset_converter），Android/iOS 均内置支持。
+
+## 「打开方式」说明（Android）
+- GitHub Actions 构建时会自动执行 `tools/patch_android.py`，向 `AndroidManifest.xml` 注入 VIEW intent-filter 并写入处理 intent 的 `MainActivity.kt`，APK 装好后即可在文件管理器的「打开方式」里看到本应用。
+- 本地构建若 `android/` 是自己 `flutter create` 生成的，需手动执行一次：
+  ```bash
+  python3 tools/patch_android.py
+  ```
+  脚本幂等，可重复执行；包名自动跟随工程。
+- 打开的文件会被复制到应用文档目录后再编辑，原文件不会被改动。
 
 ## 应用图标
 本包已附带生成好的图标资源，解压后合并到项目对应位置即可：

@@ -139,6 +139,39 @@ class FileUtils {
     await writeFile(file.path, file.content, encoding);
   }
 
+  /// 导入「打开方式」传来的本地文件（通常在缓存目录），
+  /// 复制到应用文档目录后返回 FileModel，原缓存文件会被清理。
+  static Future<FileModel?> importLocalFile(String sourcePath,
+      {String fallbackEncoding = 'UTF-8'}) async {
+    try {
+      final src = File(sourcePath);
+      if (!await src.exists()) return null;
+      final bytes = await src.readAsBytes();
+      final detected = await detectAndDecode(bytes, fallbackEncoding);
+      final dir = await getAppDir();
+      // 去掉原生侧加的 opened_<时间戳>_ 前缀
+      var name = path.basename(sourcePath)
+          .replaceFirst(RegExp(r'^opened_\d+_'), '');
+      final newPath = path.join(dir, name);
+      await File(newPath).writeAsBytes(bytes, flush: true);
+      try {
+        await src.delete();
+      } catch (_) {}
+      return FileModel(
+        id: idForPath(newPath),
+        name: name,
+        path: newPath,
+        content: detected.value,
+        rawContent: bytes,
+        encoding: detected.key,
+        isDirty: false,
+        isNewFile: false,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<String?> saveAsFile(FileModel file, {String? encoding}) async {
     try {
       final enc = encoding ?? file.encoding;

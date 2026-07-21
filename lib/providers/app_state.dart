@@ -93,6 +93,27 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// 处理「打开方式」导入的文件：加入列表并打开
+  Future<FileModel?> importOpenedFile(String sourcePath) async {
+    final file = await FileUtils.importLocalFile(sourcePath,
+        fallbackEncoding: defaultEncoding);
+    if (file == null) return null;
+    final existing = savedFiles.indexWhere((f) => f.id == file.id);
+    if (existing == -1) {
+      savedFiles.add(file);
+    } else {
+      savedFiles[existing] = file;
+    }
+    await _saveFileList();
+    try {
+      await openFile(file);
+    } catch (_) {
+      // 已达最大打开数时仅加入文件列表
+      notifyListeners();
+    }
+    return file;
+  }
+
   Future<void> openFile(FileModel file) async {
     if (openedFiles.any((f) => f.id == file.id)) {
       activeFileId = file.id;

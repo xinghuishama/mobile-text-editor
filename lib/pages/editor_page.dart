@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../widgets/editor_webview.dart';
@@ -33,6 +34,13 @@ class _EditorPageState extends State<EditorPage> {
     _cursor.dispose();
     _charCount.dispose();
     super.dispose();
+  }
+
+  /// 隐藏系统输入法。
+  /// 不能用 FocusManager unfocus()：那会断开 WebView 的输入法连接，
+  /// 导致之后点击编辑器区域无法弹出键盘。
+  void _hideKeyboard() {
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
   }
 
   /// 从 JS 侧拉取最新内容并同步到 AppState。
@@ -494,13 +502,13 @@ class _EditorPageState extends State<EditorPage> {
           _toolBtn(Icons.undo, '撤销', () => _editorKey.currentState?.undo()),
           _toolBtn(Icons.redo, '重做', () => _editorKey.currentState?.redo()),
           _toolBtn(Icons.search, '查找替换', () {
-            if (!_findBarVisible) {
-              FocusManager.instance.primaryFocus?.unfocus();
-            }
+            if (!_findBarVisible) _hideKeyboard();
             setState(() => _findBarVisible = !_findBarVisible);
           }),
           _toolBtn(Icons.format_indent_increase, '缩进',
               () => _editorKey.currentState?.indent()),
+          _toolBtn(Icons.format_indent_decrease, '减少缩进',
+              () => _editorKey.currentState?.outdent()),
           _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),
           _toolBtn(Icons.translate, '保存编码', _changeEncoding),
           const Spacer(),

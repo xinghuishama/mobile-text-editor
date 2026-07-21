@@ -44,6 +44,9 @@ jobs:
           mkdir -p ios/Runner/Assets.xcassets
           cp -r /tmp/backup/ios_icons/* ios/Runner/Assets.xcassets/ 2>/dev/null || true
 
+      - name: Apply Android patch (打开方式 intent-filter + MainActivity)
+        run: python3 tools/patch_android.py
+
       - name: Install dependencies
         run: flutter pub get
 

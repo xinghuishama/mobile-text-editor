@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 /// 编辑器回调：光标/选区变化
 typedef CursorChangedCallback = void Function(int line, int column, int selected);
@@ -208,12 +210,27 @@ class EditorWebViewState extends State<EditorWebView> {
   Future<void> indent() =>
       _run('window.editorApi && window.editorApi.indent()');
 
+  /// 减少缩进当前行或选中行
+  Future<void> outdent() =>
+      _run('window.editorApi && window.editorApi.outdent()');
+
   /// 状态信息 {line, column, chars, lines, selected}
   Future<Map<String, dynamic>?> getStats() =>
       _callJson('window.editorApi.getStats()');
 
   @override
   Widget build(BuildContext context) {
+    // Android 上强制混合合成（Hybrid Composition）渲染。
+    // 虚拟显示模式下 WebView 内的文本输入经常无法弹出系统输入法。
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        WebViewPlatform.instance is AndroidWebViewPlatform) {
+      return WebViewWidget.fromPlatformCreationParams(
+        params: AndroidWebViewWidgetCreationParams(
+          controller: _controller.platform,
+          displayWithHybridComposition: true,
+        ),
+      );
+    }
     return WebViewWidget(controller: _controller);
   }
 }
