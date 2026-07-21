@@ -499,24 +499,38 @@ class _EditorPageState extends State<EditorPage> {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Row(
         children: [
-          _toolBtn(Icons.undo, '撤销', () => _editorKey.currentState?.undo()),
-          _toolBtn(Icons.redo, '重做', () => _editorKey.currentState?.redo()),
-          _toolBtn(Icons.search, '查找替换', () {
-            if (!_findBarVisible) _hideKeyboard();
-            setState(() => _findBarVisible = !_findBarVisible);
-          }),
-          _toolBtn(Icons.format_indent_increase, '缩进',
-              () => _editorKey.currentState?.indent()),
-          _toolBtn(Icons.format_indent_decrease, '减少缩进',
-              () => _editorKey.currentState?.outdent()),
-          _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),
-          _toolBtn(Icons.translate, '保存编码', _changeEncoding),
-          const Spacer(),
-          // 右下角箭头：展开/收起符号快捷条（第二层工具栏）
+          // 按钮区可横向滑动，避免窄屏溢出把右侧箭头挤掉
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _toolBtn(Icons.undo, '撤销',
+                      () => _editorKey.currentState?.undo()),
+                  _toolBtn(Icons.redo, '重做',
+                      () => _editorKey.currentState?.redo()),
+                  _toolBtn(Icons.search, '查找替换', () {
+                    if (!_findBarVisible) _hideKeyboard();
+                    setState(() => _findBarVisible = !_findBarVisible);
+                  }),
+                  _toolBtn(Icons.format_indent_increase, '缩进',
+                      () => _editorKey.currentState?.indent()),
+                  _toolBtn(Icons.format_indent_decrease, '减少缩进',
+                      () => _editorKey.currentState?.outdent()),
+                  _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),
+                  _toolBtn(Icons.translate, '保存编码', _changeEncoding),
+                ],
+              ),
+            ),
+          ),
+          // 右下角箭头：展开/收起符号快捷条（第二层工具栏），固定不滑动
           IconButton(
             icon: Icon(appState.symbolBarExpanded
                 ? Icons.keyboard_arrow_down
                 : Icons.keyboard_arrow_up),
+            iconSize: 22,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             tooltip: appState.symbolBarExpanded ? '收起符号栏' : '展开符号栏',
             onPressed: () =>
                 appState.setSymbolBarExpanded(!appState.symbolBarExpanded),

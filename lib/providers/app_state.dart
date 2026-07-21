@@ -12,9 +12,18 @@ class AppState extends ChangeNotifier {
   int fontSize = 14;
   bool symbolBarExpanded = false;
 
+  /// 初始化（设置与文件列表加载）完成信号。
+  /// 「打开方式」导入等异步入口必须先 await ready，
+  /// 否则列表尚未加载完时写入会互相覆盖丢数据。
+  late final Future<void> ready;
+
   AppState() {
-    _loadSettings();
-    _loadSavedFiles();
+    ready = _init();
+  }
+
+  Future<void> _init() async {
+    await _loadSettings();
+    await _loadSavedFiles();
   }
 
   Future<void> _loadSettings() async {
@@ -75,6 +84,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<FileModel> createNewFile({String? content}) async {
+    await ready;
     final file = await FileUtils.createNewFile(content: content ?? '', encoding: defaultEncoding);
     savedFiles.add(file);
     await _saveFileList();
@@ -83,6 +93,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<FileModel?> openExternalFile() async {
+    await ready;
     final file = await FileUtils.openExternalFile(fallbackEncoding: defaultEncoding);
     if (file != null) {
       savedFiles.add(file);
@@ -95,6 +106,7 @@ class AppState extends ChangeNotifier {
 
   /// 处理「打开方式」导入的文件：加入列表并打开
   Future<FileModel?> importOpenedFile(String sourcePath) async {
+    await ready; // 确保文件列表已加载，避免覆盖
     final file = await FileUtils.importLocalFile(sourcePath,
         fallbackEncoding: defaultEncoding);
     if (file == null) return null;

@@ -80,6 +80,9 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// 触摸标记：仅在用户手指触摸编辑器后发生的 focus 才弹键盘
+var imeTouchArmed = false;
+
 /* ------------------------------------------------------------
  * Monaco 模式
  * ---------------------------------------------------------- */
@@ -119,6 +122,17 @@ function initMonaco() {
   });
   monacoEditor.onDidChangeCursorPosition(sendCursor);
   monacoEditor.onDidChangeCursorSelection(sendCursor);
+
+  // 真实触摸导致的焦点获得 → 通知原生弹系统键盘。
+  // （程序性 focus，如查找跳转，不弹键盘）
+  monacoEditor.onDidFocusEditorText(function () {
+    if (imeTouchArmed) {
+      imeTouchArmed = false;
+      postToFlutter({ type: 'ime', state: 'show' });
+    }
+  });
+  document.getElementById('container').addEventListener(
+    'touchstart', function () { imeTouchArmed = true; }, true);
 
   function sendCursor() {
     var pos = monacoEditor.getPosition();
@@ -251,6 +265,15 @@ function initFallback(reason) {
   ta.addEventListener('click', sendCursor);
   ta.addEventListener('keyup', sendCursor);
   ta.addEventListener('select', sendCursor);
+
+  // 触摸获得焦点 → 通知原生弹系统键盘
+  ta.addEventListener('touchstart', function () { imeTouchArmed = true; }, true);
+  ta.addEventListener('focus', function () {
+    if (imeTouchArmed) {
+      imeTouchArmed = false;
+      postToFlutter({ type: 'ime', state: 'show' });
+    }
+  });
 
   function pushUndo() {
     fb.undoStack.push({ text: ta.value, start: ta.selectionStart, end: ta.selectionEnd });

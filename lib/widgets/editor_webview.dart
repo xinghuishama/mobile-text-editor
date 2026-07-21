@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
@@ -38,6 +39,11 @@ class EditorWebView extends StatefulWidget {
 class EditorWebViewState extends State<EditorWebView> {
   late final WebViewController _controller;
   bool _editorReady = false;
+
+  /// 原生 IME 通道：让 WebView 请求焦点并弹出系统键盘。
+  /// Monaco 的输入框焦点由 JS 程序触发，Android 不会自动弹键盘，
+  /// 需要原生侧 showSoftInput 补一下（输入仍走 WebView 自己的连接）。
+  static const MethodChannel _imeChannel = MethodChannel('mte/ime');
 
   @override
   void initState() {
@@ -81,6 +87,13 @@ class EditorWebViewState extends State<EditorWebView> {
           (data['column'] as num?)?.toInt() ?? 1,
           (data['selected'] as num?)?.toInt() ?? 0,
         );
+        break;
+      case 'ime':
+        if (data['state'] == 'show') {
+          try {
+            _imeChannel.invokeMethod('show');
+          } catch (_) {}
+        }
         break;
     }
   }

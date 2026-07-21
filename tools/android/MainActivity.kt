@@ -1,18 +1,28 @@
 package PACKAGE_NAME
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.webkit.WebView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
 
 /**
- * 处理「打开方式」(ACTION_VIEW) intent：
- * 把 content:// 或 file:// 指向的内容复制到缓存目录，
- * 通过 EventChannel("mte/open_file") 把本地路径发给 Dart 侧。
+ * 1) 处理「打开方式」(ACTION_VIEW) intent：
+ *    把 content:// 或 file:// 指向的内容复制到缓存目录，
+ *    通过 EventChannel("mte/open_file") 把本地路径发给 Dart 侧。
+ * 2) IME 通道 MethodChannel("mte/ime")：
+ *    Monaco 编辑器的输入框焦点由 JS 程序触发，Android WebView 不会
+ *    自动弹系统键盘；Dart 侧在用户触摸编辑器导致 focus 时调用 "show"，
+ *    这里对 WebView 强制 requestFocus + showSoftInput。
  *
  * 注意：本文件由 tools/patch_android.py 写入，
  * PACKAGE_NAME 会被替换为工程实际的包名。
@@ -36,6 +46,40 @@ class MainActivity : FlutterActivity() {
                 eventSink = null
             }
         })
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "mte/ime")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "show") {
+                    showKeyboardOnWebView()
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
+    }
+
+    /** 让视图树中的 WebView 获得焦点并弹出系统输入法 */
+    private fun showKeyboardOnWebView() {
+        try {
+            val root = activity.window?.decorView?.rootView ?: return
+            val webView = findWebView(root) ?: return
+            webView.requestFocus()
+            val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
+                as InputMethodManager
+            imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun findWebView(view: View): WebView? {
+        if (view is WebView) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val found = findWebView(view.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -90,6 +90,12 @@ flutter run
   脚本幂等，可重复执行；包名自动跟随工程。
 - 打开的文件会被复制到应用文档目录后再编辑，原文件不会被改动。
 
+## 移动端输入法说明
+Monaco 的输入框焦点由 JS 程序转移产生，Android WebView 对此不会自动弹系统键盘。
+本项目的处理：编辑器页面监听「用户触摸导致的 focus」，通过 `MethodChannel("mte/ime")`
+通知原生，原生侧对 WebView 执行 `requestFocus() + showSoftInput()`。
+程序性焦点（如查找跳转）不会误弹键盘。
+
 ## 应用图标
 本包已附带生成好的图标资源，解压后合并到项目对应位置即可：
 - **Android**：`android/app/src/main/res/mipmap-*/ic_launcher.png`（方形）与 `ic_launcher_round.png`（圆形），覆盖 `flutter create` 生成的默认图标。Manifest 引用 `@mipmap/ic_launcher` 无需修改。
