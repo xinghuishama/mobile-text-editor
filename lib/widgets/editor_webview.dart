@@ -204,6 +204,10 @@ class EditorWebViewState extends State<EditorWebView> {
   Future<void> insertText(String text) => _run(
       'window.editorApi && window.editorApi.insertText(${_jsString(text)})');
 
+  /// 缩进当前行或选中行
+  Future<void> indent() =>
+      _run('window.editorApi && window.editorApi.indent()');
+
   /// 状态信息 {line, column, chars, lines, selected}
   Future<Map<String, dynamic>?> getStats() =>
       _callJson('window.editorApi.getStats()');

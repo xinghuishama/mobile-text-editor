@@ -10,6 +10,7 @@ class AppState extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.dark;
   String defaultEncoding = 'UTF-8';
   int fontSize = 14;
+  bool symbolBarExpanded = false;
 
   AppState() {
     _loadSettings();
@@ -22,6 +23,15 @@ class AppState extends ChangeNotifier {
     themeMode = theme == 'dark' ? ThemeMode.dark : ThemeMode.light;
     defaultEncoding = prefs.getString('defaultEncoding') ?? 'UTF-8';
     fontSize = prefs.getInt('fontSize') ?? 14;
+    symbolBarExpanded = prefs.getBool('symbolBarExpanded') ?? false;
+    notifyListeners();
+  }
+
+  /// 展开/收起底部符号快捷条（记忆设置）
+  Future<void> setSymbolBarExpanded(bool expanded) async {
+    symbolBarExpanded = expanded;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('symbolBarExpanded', expanded);
     notifyListeners();
   }
 

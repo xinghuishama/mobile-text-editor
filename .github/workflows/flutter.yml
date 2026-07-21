@@ -20,6 +20,11 @@ jobs:
         run: |
           mkdir -p /tmp/backup
           cp -r lib assets pubspec.yaml /tmp/backup/
+          # 备份自定义应用图标（CI 重建工程后恢复，防止被默认图标覆盖）
+          mkdir -p /tmp/backup/android_res
+          cp -r android/app/src/main/res/* /tmp/backup/android_res/ 2>/dev/null || true
+          mkdir -p /tmp/backup/ios_icons
+          cp -r ios/Runner/Assets.xcassets/* /tmp/backup/ios_icons/ 2>/dev/null || true
 
       - name: Clean directory (keep .git)
         run: |
@@ -33,6 +38,11 @@ jobs:
           cp -r /tmp/backup/lib .
           cp -r /tmp/backup/assets .
           cp /tmp/backup/pubspec.yaml .
+          # 恢复自定义应用图标
+          mkdir -p android/app/src/main/res
+          cp -r /tmp/backup/android_res/* android/app/src/main/res/ 2>/dev/null || true
+          mkdir -p ios/Runner/Assets.xcassets
+          cp -r /tmp/backup/ios_icons/* ios/Runner/Assets.xcassets/ 2>/dev/null || true
 
       - name: Install dependencies
         run: flutter pub get

@@ -525,6 +525,29 @@ window.editorApi = {
     }
   },
 
+  /// 缩进当前行（或选中行）
+  indent: function () {
+    if (monacoEditor) {
+      var action = monacoEditor.getAction('editor.action.indentLines');
+      if (action) { action.run(); }
+      else { monacoEditor.trigger('flutter', 'editor.action.indentLines', null); }
+      return;
+    }
+    if (fb) {
+      var ta = fb.ta;
+      var start = ta.selectionStart, end = ta.selectionEnd;
+      var v = ta.value;
+      var ls = (start <= 0) ? 0 : (v.lastIndexOf('\n', start - 1) + 1);
+      var affected = v.substring(ls, end);
+      var indented = affected.split('\n').map(function (l) { return '\t' + l; }).join('\n');
+      fb.pushUndo();
+      ta.setRangeText(indented, ls, end, 'select');
+      var evt;
+      try { evt = new Event('input', { bubbles: true }); } catch (e) { evt = document.createEvent('Event'); evt.initEvent('input', true, true); }
+      ta.dispatchEvent(evt);
+    }
+  },
+
   getStats: function () {
     var text = window.editorApi.getContent();
     var lines = text === '' ? 1 : text.split('\n').length;
@@ -659,6 +682,12 @@ function selftest() {
 
       api.insertText('// inserted\n');
       check('insertText', api.getContent().indexOf('// inserted') !== -1);
+
+      api.setContent('line1', 'plaintext');
+      api.gotoLine(1);
+      api.indent();
+      var indented = api.getContent();
+      check('indent adds leading whitespace', indented.indexOf('\t') === 0 || indented.indexOf('    ') === 0);
 
       api.setDarkMode(false);
       check('setDarkMode light', document.body.classList.contains('light'));

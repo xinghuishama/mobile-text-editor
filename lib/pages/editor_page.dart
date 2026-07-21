@@ -254,28 +254,24 @@ class _EditorPageState extends State<EditorPage> {
               : '${activeFile.name}${activeFile.isDirty ? ' ●' : ''}'),
           actions: [
             IconButton(
+              icon: const Icon(Icons.folder_open),
+              tooltip: '打开文件',
+              onPressed: _openExternal,
+            ),
+            IconButton(
               icon: const Icon(Icons.save),
               tooltip: '保存',
               onPressed: activeFile == null ? null : _save,
             ),
             IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: '查找替换',
-              onPressed: activeFile == null
-                  ? null
-                  : () {
-                      // 打开查找栏前先收起系统键盘，避免输入法挡住查找栏
-                      if (!_findBarVisible) {
-                        FocusManager.instance.primaryFocus?.unfocus();
-                      }
-                      setState(() => _findBarVisible = !_findBarVisible);
-                    },
+              icon: const Icon(Icons.save_as),
+              tooltip: '另存为',
+              onPressed: activeFile == null ? null : _saveAs,
             ),
             PopupMenuButton<String>(
               tooltip: '更多',
               onSelected: (value) {
                 switch (value) {
-                  case 'save_as': _saveAs(); break;
                   case 'goto_line': _gotoLine(); break;
                   case 'encoding': _changeEncoding(); break;
                   case 'close_others': _closeOtherTabs(); break;
@@ -287,7 +283,6 @@ class _EditorPageState extends State<EditorPage> {
                 }
               },
               itemBuilder: (ctx) => [
-                const PopupMenuItem(value: 'save_as', child: Text('另存为')),
                 const PopupMenuItem(value: 'goto_line', child: Text('跳转到行')),
                 const PopupMenuItem(value: 'encoding', child: Text('保存编码')),
                 const PopupMenuItem(value: 'close_others', child: Text('关闭其他标签')),
@@ -350,9 +345,10 @@ class _EditorPageState extends State<EditorPage> {
                       ),
                     _buildStatusBar(appState, activeFile.encoding,
                         _getLanguageFromFileName(activeFile.name)),
+                    // 主工具栏常驻；符号快捷条默认折叠，点右下角箭头展开
                     _buildToolbar(appState),
-                    // 标点符号快捷条贴最底部，键盘弹起时正好在键盘上方
-                    SymbolBar(editorKey: _editorKey),
+                    if (appState.symbolBarExpanded)
+                      SymbolBar(editorKey: _editorKey),
                   ],
                 ),
               ),
@@ -503,21 +499,19 @@ class _EditorPageState extends State<EditorPage> {
             }
             setState(() => _findBarVisible = !_findBarVisible);
           }),
+          _toolBtn(Icons.format_indent_increase, '缩进',
+              () => _editorKey.currentState?.indent()),
           _toolBtn(Icons.format_list_numbered, '跳转到行', _gotoLine),
-          _toolBtn(Icons.save, '保存', _save),
-          _toolBtn(Icons.save_as, '另存为', _saveAs),
           _toolBtn(Icons.translate, '保存编码', _changeEncoding),
           const Spacer(),
+          // 右下角箭头：展开/收起符号快捷条（第二层工具栏）
           IconButton(
-            icon: Icon(appState.themeMode == ThemeMode.dark
-                ? Icons.light_mode
-                : Icons.dark_mode),
-            tooltip: '切换主题',
-            onPressed: () {
-              appState.setThemeMode(appState.themeMode == ThemeMode.dark
-                  ? ThemeMode.light
-                  : ThemeMode.dark);
-            },
+            icon: Icon(appState.symbolBarExpanded
+                ? Icons.keyboard_arrow_down
+                : Icons.keyboard_arrow_up),
+            tooltip: appState.symbolBarExpanded ? '收起符号栏' : '展开符号栏',
+            onPressed: () =>
+                appState.setSymbolBarExpanded(!appState.symbolBarExpanded),
           ),
         ],
       ),
