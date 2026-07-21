@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../widgets/editor_webview.dart';
 import '../widgets/find_replace_bar.dart';
+import '../widgets/symbol_bar.dart';
 
 class _CursorInfo {
   final int line;
@@ -350,6 +351,8 @@ class _EditorPageState extends State<EditorPage> {
                     _buildStatusBar(appState, activeFile.encoding,
                         _getLanguageFromFileName(activeFile.name)),
                     _buildToolbar(appState),
+                    // 标点符号快捷条贴最底部，键盘弹起时正好在键盘上方
+                    SymbolBar(editorKey: _editorKey),
                   ],
                 ),
               ),

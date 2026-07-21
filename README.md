@@ -13,6 +13,7 @@
 - 🌗 暗色/亮色主题（编辑器联动切换）
 - 🔤 编码支持：UTF-8 / GBK / Big5（打开时自动检测，保存时可指定编码）
 - 📊 状态栏：实时显示行列号、选中字数、总字符数、编码、语言、编辑器模式
+- ⌨️ 标点符号快捷条（Acode 风格）：底部一行常用编程符号，点击插入光标处，键盘弹起时贴键盘顶部
 - 🔠 编辑器字号可调（设置页）
 - 📴 离线降级：Monaco 加载失败（无网络）时自动切换内置基础编辑器，查找替换/撤销重做等功能全部可用
 
@@ -56,7 +57,8 @@ lib/
 │   └── settings_page.dart     # 设置页（主题/编码/字号）
 ├── widgets/
 │   ├── editor_webview.dart    # WebView 编辑器封装与 JS 桥接
-│   └── find_replace_bar.dart  # 查找替换面板
+│   ├── find_replace_bar.dart  # 查找替换面板
+│   └── symbol_bar.dart        # 标点符号快捷条
 └── utils/
     ├── file_utils.dart        # 文件读写、编码转换、自动检测
     └── theme_utils.dart       # 主题定义
@@ -72,6 +74,12 @@ flutter run
 注意事项：
 - Monaco Editor 通过 CDN 加载，**Android release 构建需确保** `android/app/src/main/AndroidManifest.xml` 中有 `<uses-permission android:name="android.permission.INTERNET"/>`（`flutter create` 模板默认已包含）。无网络时会自动降级为基础编辑器，功能不受影响（无语法高亮）。
 - 编码转换（GBK/Big5）依赖平台原生能力（charset_converter），Android/iOS 均内置支持。
+
+## 应用图标
+本包已附带生成好的图标资源，解压后合并到项目对应位置即可：
+- **Android**：`android/app/src/main/res/mipmap-*/ic_launcher.png`（方形）与 `ic_launcher_round.png`（圆形），覆盖 `flutter create` 生成的默认图标。Manifest 引用 `@mipmap/ic_launcher` 无需修改。
+- **iOS**：`ios/Runner/Assets.xcassets/AppIcon.appiconset/` 全套尺寸 + `Contents.json`，直接替换整个目录。
+- 若有更高清的原图（建议 1024×1024），替换后重新生成各尺寸效果更佳。
 
 ## 更新日志
 
